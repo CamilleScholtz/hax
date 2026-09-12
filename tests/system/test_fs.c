@@ -24,26 +24,6 @@ static void touch_file(const char *path, mode_t mode)
         close(fd);
 }
 
-static char *replace_path_env(const char *value)
-{
-    const char *current = getenv("PATH");
-    char *saved = current ? xstrdup(current) : NULL;
-    if (value)
-        setenv("PATH", value, 1);
-    else
-        unsetenv("PATH");
-    return saved;
-}
-
-static void restore_path_env(char *saved)
-{
-    if (saved)
-        setenv("PATH", saved, 1);
-    else
-        unsetenv("PATH");
-    free(saved);
-}
-
 static void test_which_finds_sh(void)
 {
     /* `sh` is present on every supported platform. */
@@ -81,18 +61,18 @@ static void test_which_empty_null_and_unset_path(void)
     EXPECT(fs_which("") == NULL);
     EXPECT(fs_which(NULL) == NULL);
 
-    char *saved_path = replace_path_env(NULL);
+    char *saved_path = t_path_replace(NULL);
     EXPECT(fs_which("sh") == NULL);
-    restore_path_env(saved_path);
+    t_path_restore(saved_path);
 }
 
 static void test_which_skips_relative_path_entries(void)
 {
-    char *saved_path = replace_path_env(".:relative/dir:");
+    char *saved_path = t_path_replace(".:relative/dir:");
     char *path = fs_which("sh");
     EXPECT(path == NULL);
     free(path);
-    restore_path_env(saved_path);
+    t_path_restore(saved_path);
 }
 
 static void test_which_resolves_in_later_entry(void)
@@ -101,13 +81,13 @@ static void test_which_resolves_in_later_entry(void)
     char *executable_path = path_join(dir, "hax-test-tool");
     touch_file(executable_path, 0755);
     char *path_env = xasprintf("/nonexistent-hax-dir:%s", dir);
-    char *saved_path = replace_path_env(path_env);
+    char *saved_path = t_path_replace(path_env);
 
     char *resolved_path = fs_which("hax-test-tool");
     EXPECT(resolved_path != NULL);
     EXPECT(resolved_path && strcmp(resolved_path, executable_path) == 0);
 
-    restore_path_env(saved_path);
+    t_path_restore(saved_path);
     free(resolved_path);
     free(path_env);
     free(executable_path);
@@ -123,13 +103,13 @@ static void test_which_skips_directory_match(void)
     char *executable_path = path_join(second_dir, "hax-test-tool");
     touch_file(executable_path, 0755);
     char *path_env = xasprintf("%s:%s", first_dir, second_dir);
-    char *saved_path = replace_path_env(path_env);
+    char *saved_path = t_path_replace(path_env);
 
     char *resolved_path = fs_which("hax-test-tool");
     EXPECT(resolved_path != NULL);
     EXPECT(resolved_path && strcmp(resolved_path, executable_path) == 0);
 
-    restore_path_env(saved_path);
+    t_path_restore(saved_path);
     free(resolved_path);
     free(path_env);
     free(executable_path);
@@ -148,13 +128,13 @@ static void test_which_skips_non_executable(void)
     const char *dir = t_tempdir();
     char *file_path = path_join(dir, "hax-test-tool");
     touch_file(file_path, 0644);
-    char *saved_path = replace_path_env(dir);
+    char *saved_path = t_path_replace(dir);
 
     char *resolved_path = fs_which("hax-test-tool");
     EXPECT(resolved_path == NULL);
     free(resolved_path);
 
-    restore_path_env(saved_path);
+    t_path_restore(saved_path);
     free(file_path);
 }
 
