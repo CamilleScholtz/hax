@@ -11,8 +11,6 @@
 #include "system/locale.h"
 #include "terminal/ansi.h"
 
-#define BRAILLE_PREFIX "\xE2\xA0"
-
 static char capture_buf[4096];
 
 static void capture_init(void)
@@ -45,11 +43,11 @@ static const char *capture_read(void)
     return capture_buf;
 }
 
-static void test_glyph_is_one_braille_codepoint(void)
+static void test_glyph_is_one_ascii_character(void)
 {
     const char *glyph = spinner_glyph_now();
-    EXPECT(strncmp(glyph, BRAILLE_PREFIX, 2) == 0);
-    EXPECT(glyph[3] == '\0');
+    EXPECT(strlen(glyph) == 1);
+    EXPECT(strchr("|/-\\", glyph[0]) != NULL);
 }
 
 /* All spinner entry points must be silent no-ops on the NULL spinner non-TTY runs carry. */
@@ -139,7 +137,7 @@ static void test_tool_frame_climb_excludes_wrapped_last_row(void)
 int main(void)
 {
     capture_init();
-    test_glyph_is_one_braille_codepoint();
+    test_glyph_is_one_ascii_character();
     test_spinner_is_null_and_silent_without_tty();
     test_tool_frame_paints_rows_verbatim();
     test_tool_frame_climb_accounts_for_reflow();

@@ -27,10 +27,7 @@
 #define DEFAULT_LABEL     "working..."
 #define DEFAULT_LABEL_KEY "working"
 
-static const char *const SPINNER_FRAMES[] = {
-    "\xE2\xA0\x8B", "\xE2\xA0\x99", "\xE2\xA0\xB9", "\xE2\xA0\xB8", "\xE2\xA0\xBC",
-    "\xE2\xA0\xB4", "\xE2\xA0\xA6", "\xE2\xA0\xA7", "\xE2\xA0\x87", "\xE2\xA0\x8F",
-};
+static const char *const SPINNER_FRAMES[] = {"|", "/", "-", "\\"};
 #define SPINNER_FRAME_COUNT (sizeof(SPINNER_FRAMES) / sizeof(SPINNER_FRAMES[0]))
 
 enum spinner_mode {

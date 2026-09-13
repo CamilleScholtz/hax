@@ -17,6 +17,7 @@ notes (see [docs/releasing.md](docs/releasing.md)).
 - Downstream: Up/Down move through displayed prompt rows before recalling history at the
   first/last row. Ctrl-P/Ctrl-N still recall history directly.
 - Downstream: the interactive prompt uses ASCII `>` instead of `❯`.
+- Downstream: the shared spinner uses ASCII frames (`| / - \`).
 
 - Custom providers no longer take their models.dev catalog identity from their own name; set
   `catalog_id` explicitly (for example `"catalog_id": "groq"`) to keep pricing and context
