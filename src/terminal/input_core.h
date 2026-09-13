@@ -111,6 +111,8 @@ size_t input_core_line_start(const struct input *in);
 size_t input_core_line_end(const struct input *in);
 void input_core_move_left(struct input *in);
 void input_core_move_right(struct input *in);
+/* Move one displayed row (-1 up, +1 down); recall history only at the outer rows. */
+void input_core_move_vertical(struct input *in, int direction);
 void input_core_move_word_left(struct input *in);
 void input_core_move_word_right(struct input *in);
 void input_core_delete_back(struct input *in);

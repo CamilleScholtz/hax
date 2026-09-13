@@ -740,6 +740,86 @@ static void test_kill_to_bol(void)
     input_free(in);
 }
 
+static void test_vertical_motion_before_history(void)
+{
+    struct input *in = new_with("abcd\nx\nabcdef");
+    input_core_history_add(in, "older");
+    in->hist_pos = in->hist_n;
+    in->cursor = 10;
+    input_core_move_vertical(in, -1);
+    EXPECT(in->cursor == 6);
+    EXPECT(in->hist_pos == in->hist_n);
+    input_core_move_vertical(in, -1);
+    EXPECT(in->cursor == 1);
+    input_core_move_vertical(in, -1);
+    EXPECT_STR_EQ(in->buf, "older");
+    input_core_move_vertical(in, 1);
+    EXPECT_STR_EQ(in->buf, "abcd\nx\nabcdef");
+    EXPECT(in->cursor == in->len);
+    in->cursor = 2;
+    input_core_move_vertical(in, 1);
+    EXPECT(in->cursor == 6);
+    input_core_move_vertical(in, 1);
+    EXPECT(in->cursor == 8);
+    input_core_move_vertical(in, 1);
+    EXPECT(in->cursor == 8);
+    input_free(in);
+}
+
+static void test_vertical_motion_empty_lines(void)
+{
+    struct input *in = new_with("\na\n\n");
+    input_core_move_vertical(in, -1);
+    EXPECT(in->cursor == 3);
+    input_core_move_vertical(in, -1);
+    EXPECT(in->cursor == 1);
+    input_core_move_vertical(in, -1);
+    EXPECT(in->cursor == 0);
+    input_core_move_vertical(in, -1);
+    EXPECT(in->cursor == 0);
+    input_core_move_vertical(in, 1);
+    EXPECT(in->cursor == 1);
+    input_free(in);
+}
+
+static void test_vertical_motion_wrapping(void)
+{
+    struct input *in = new_with("abc def ghi");
+    in->prompt = "> ";
+    in->display_columns = 10;
+    input_core_history_add(in, "older");
+    in->hist_pos = in->hist_n;
+    input_core_move_vertical(in, -1);
+    EXPECT(in->cursor == 3);
+    EXPECT_STR_EQ(in->buf, "abc def ghi");
+    input_core_move_vertical(in, 1);
+    EXPECT(in->cursor == in->len);
+    input_core_set_buffer(in, "abcdefghijk");
+    input_core_move_vertical(in, -1);
+    EXPECT(in->cursor == 4);
+    input_core_move_vertical(in, 1);
+    EXPECT(in->cursor == in->len);
+    input_free(in);
+}
+
+static void test_vertical_motion_utf8_and_tabs(void)
+{
+    struct input *in = new_with("界z\nabc");
+    input_core_move_vertical(in, -1);
+    EXPECT(in->cursor == 4);
+    in->cursor = 6;
+    input_core_move_vertical(in, -1);
+    EXPECT(in->cursor == 0);
+    input_core_set_buffer(in, "éz\nab");
+    in->cursor = 5;
+    input_core_move_vertical(in, -1);
+    EXPECT(in->cursor == 2);
+    input_core_set_buffer(in, "\tx\nabc");
+    input_core_move_vertical(in, -1);
+    EXPECT(in->cursor == 0);
+    input_free(in);
+}
+
 static void test_history_empty(void)
 {
     struct input *in = input_new();
@@ -1182,6 +1262,10 @@ int main(void)
     test_kill_to_eol_at_buffer_end();
     test_kill_to_bol();
 
+    test_vertical_motion_before_history();
+    test_vertical_motion_empty_lines();
+    test_vertical_motion_wrapping();
+    test_vertical_motion_utf8_and_tabs();
     test_history_empty();
     test_history_navigation();
     test_history_draft_preserved();

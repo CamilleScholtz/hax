@@ -109,7 +109,8 @@ The editor supports common readline-style movement and history keys. Notable hax
 | --- | --- |
 | Enter | Submit; at a paused empty prompt, continue without adding a message. |
 | Shift-Enter | Insert a newline if the terminal sends LF for it. |
-| Up / Down | Recall previous/next prompts. |
+| Up / Down | Move through displayed prompt rows; recall previous/next prompts at the first/last row. |
+| Ctrl-P / Ctrl-N | Recall previous/next prompts regardless of cursor position. |
 | Ctrl-R | Search persistent prompt history. |
 | Esc | Pause after the current step so you can steer. |
 | Esc Esc | Interrupt the model or running tool immediately. |

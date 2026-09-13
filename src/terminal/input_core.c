@@ -669,6 +669,51 @@ void input_core_compute_layout(const char *buf, size_t len, size_t cursor, int p
     input_core_render(buf, len, cursor, prompt_width, prompt_width, columns, NULL, NULL, out);
 }
 
+void input_core_move_vertical(struct input *in, int direction)
+{
+    int prompt_width = input_core_prompt_width(in->prompt ? in->prompt : "");
+    int continuation_column = in->continuation_at_column_zero ? 0 : prompt_width;
+    struct input_layout layout;
+    input_core_render(in->buf, in->len, in->cursor, prompt_width, continuation_column,
+                      in->display_columns, NULL, NULL, &layout);
+    int row = layout.cursor_row + direction;
+    if (row < 0) {
+        input_core_history_prev(in);
+        return;
+    }
+    if (row >= layout.total_rows) {
+        input_core_history_next(in);
+        return;
+    }
+
+    int column = layout.cursor_col;
+    int indent = row == 0 ? prompt_width : continuation_column;
+    if (column < indent)
+        column = indent;
+
+    /* Layout positions are ordered by byte offset. Search the existing renderer rather than
+     * duplicating its word wrapping, then snap back to a codepoint boundary. */
+    size_t low = 0, high = in->len + 1;
+    while (low < high) {
+        size_t middle = low + (high - low) / 2;
+        input_core_render(in->buf, in->len, middle, prompt_width, continuation_column,
+                          in->display_columns, NULL, NULL, &layout);
+        if (layout.cursor_row < row || (layout.cursor_row == row && layout.cursor_col <= column))
+            low = middle + 1;
+        else
+            high = middle;
+    }
+    size_t target = low ? low - 1 : 0;
+    size_t offset = 0;
+    while (offset < target) {
+        size_t next = utf8_next(in->buf, in->len, offset);
+        if (next > target)
+            break;
+        offset = next;
+    }
+    in->cursor = offset;
+}
+
 struct render_window {
     int first_row;
     int last_row;

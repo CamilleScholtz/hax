@@ -263,10 +263,10 @@ static void apply_action(struct input *in, enum input_action a)
         input_core_delete_fwd(in);
         return;
     case INPUT_ACTION_HISTORY_PREV:
-        input_core_history_prev(in);
+        input_core_move_vertical(in, -1);
         return;
     case INPUT_ACTION_HISTORY_NEXT:
-        input_core_history_next(in);
+        input_core_move_vertical(in, 1);
         return;
     case INPUT_ACTION_PAGE_UP:
     case INPUT_ACTION_PAGE_DOWN:
