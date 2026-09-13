@@ -33,7 +33,7 @@ void banner_put(struct banner_writer *w, const char *separator, const char *styl
 /* End the block: closes any open style and finishes the last row. */
 void banner_close(struct banner_writer *w);
 
-/* The identity rows: hax [preset] › provider · model · effort. When the identity overflows
+/* The identity rows: hax [preset] > provider · model · effort. When the identity overflows
  * its row, the break lands after the provider so model and effort stay together. */
 void banner_identity(FILE *out, const struct provider *provider,
                      const struct agent_session *session);

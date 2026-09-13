@@ -20,10 +20,10 @@
 
 #define TAIL_RING_CAPACITY 1500
 
-static const char GUTTER_FIRST[] = "\xE2\x94\x8C";  /* ┌ */
-static const char GUTTER_BODY[] = "\xE2\x94\x82";   /* │ */
-static const char GUTTER_LAST[] = "\xE2\x94\x94";   /* └ */
-static const char GUTTER_MARKER[] = "\xE2\x80\xBA"; /* › */
+static const char GUTTER_FIRST[] = "\xE2\x94\x8C"; /* ┌ */
+static const char GUTTER_BODY[] = "\xE2\x94\x82";  /* │ */
+static const char GUTTER_LAST[] = "\xE2\x94\x94";  /* └ */
+static const char GUTTER_MARKER[] = ">";
 
 struct preview_limits {
     int head_lines;

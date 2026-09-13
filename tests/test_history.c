@@ -126,7 +126,7 @@ static void test_full_shows_tool_output(void)
     /* The body sits inside a closed block: a single-row block ends with
      * the solo chevron, and the cursor ops that painted it (\r overprint,
      * erase-line) are resolved rather than leaked into the output. */
-    const char *chevron = strstr(out, "\xE2\x80\xBA");
+    const char *chevron = strstr(out, ">");
     EXPECT(chevron != NULL && strstr(chevron, "COUNT_OUTPUT_164") != NULL);
     EXPECT(strstr(out, "\r") == NULL);
     EXPECT(strstr(out, "\x1b[K") == NULL);
