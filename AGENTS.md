@@ -4,6 +4,12 @@ Guidance for AI agents working in this repository. Keep this file high-level: co
 architecture seams, and durable conventions belong here; module-level details belong in code or
 headers.
 
+## Downstream fork
+
+This repository is a personal downstream fork of `OleksandrChekhovskyi/hax`. Local preferences
+need not match upstream's product direction. Keep the patch surface small and preserve upstream
+architecture and conventions.
+
 ## Build, test, lint
 
 ```sh
