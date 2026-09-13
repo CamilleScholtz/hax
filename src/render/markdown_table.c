@@ -14,7 +14,7 @@
 #define TABLE_MAX_ROWS  2048
 #define TABLE_MAX_BYTES (1 << 16)
 
-#define GLYPH_BULLET "\xe2\x80\xa2"
+#define GLYPH_BULLET "-"
 #define GLYPH_HLINE  "\xe2\x94\x80"
 #define GLYPH_VLINE  "\xe2\x94\x82"
 #define GLYPH_CROSS  "\xe2\x94\xbc"
@@ -86,7 +86,7 @@ static void emit_wrapped_raw(const struct md_table_context *ctx, const char *s, 
 static void emit_wrapped_bullet(const struct md_table_context *ctx)
 {
     emit_wrapped_raw(ctx, ANSI_DIM, strlen(ANSI_DIM));
-    emit_wrapped_text(ctx, GLYPH_BULLET " ", 4);
+    emit_wrapped_text(ctx, GLYPH_BULLET " ", 2);
     emit_wrapped_raw(ctx, ANSI_BOLD_OFF, strlen(ANSI_BOLD_OFF));
 }
 
@@ -427,7 +427,7 @@ static void finalize_table(struct md_table *t, const struct md_table_context *ct
             struct cell *row = &grid[(size_t)(1 + r) * ncols];
             for (int j = 0; j < ncols; j++) {
                 if (j == 0)
-                    emit_wrapped_bullet(ctx); /* dim "• " */
+                    emit_wrapped_bullet(ctx); /* dim "- " */
                 else
                     emit_wrapped_text(ctx, "  ", 2);
                 ctx->open_bold(ctx->user);        /* tracked, so a wrapped label keeps bold */

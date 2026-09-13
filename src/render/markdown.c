@@ -361,9 +361,9 @@ enum step_result {
 /* ---------- thematic breaks ---------- */
 
 /* Spaced dots distinguish model-authored dividers from solid system rules. */
-#define HRULE_DOT_GAP 3              /* spaces between divider dots */
-#define GLYPH_DOT     "\xc2\xb7"     /* · middle dot — model divider */
-#define GLYPH_BULLET  "\xe2\x80\xa2" /* • list marker */
+#define HRULE_DOT_GAP 3          /* spaces between divider dots */
+#define GLYPH_DOT     "\xc2\xb7" /* · middle dot — model divider */
+#define GLYPH_BULLET  "-"        /* - list marker */
 
 static void temit(struct md_renderer *m, const char *s, size_t n)
 {
@@ -408,7 +408,7 @@ static void render_hrule(struct md_renderer *m)
 static void emit_bullet(struct md_renderer *m)
 {
     emit_raw(m, ANSI_DIM);
-    emit_text(m, GLYPH_BULLET " ", 4);
+    emit_text(m, GLYPH_BULLET " ", 2);
     emit_raw(m, ANSI_BOLD_OFF); /* SGR 22 closes dim */
 }
 

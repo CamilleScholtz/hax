@@ -13,7 +13,7 @@
 #define DIM  ANSI_DIM
 #define OFF  ANSI_BOLD_OFF
 #define BLD  ANSI_BOLD
-#define BUL  DIM "\xe2\x80\xa2 " OFF
+#define BUL  DIM "- " OFF
 #define HL   "\xe2\x94\x80"
 #define VB   "\xe2\x94\x82"
 #define CR   "\xe2\x94\xbc"

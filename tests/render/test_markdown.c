@@ -26,7 +26,7 @@
 #define LNK_OFF  ANSI_UNDERLINE_OFF              /* \x1b[24m */
 #define ERASE    ANSI_ERASE_LINE                 /* \x1b[K */
 #define CUB(n)   "\x1b[" #n "D"                  /* cursor back n columns (retro-wrap) */
-#define BUL      DIM "\xe2\x80\xa2 " OFF         /* dim "• " bullet */
+#define BUL      DIM "- " OFF                    /* dim "- " bullet */
 #define DOT      "\xc2\xb7"                      /* · middle dot (divider) */
 #define EMD      "\xe2\x80\x94"                  /* — em dash */
 #define DINKUS   DIM DOT "   " DOT "   " DOT OFF /* 3-dot divider (wide/unlimited width) */
@@ -2058,7 +2058,7 @@ static char *strip_ws(const char *s)
 /* Strip ANSI CSI escape sequences (\x1b[ ... final-byte) AND spaces/newlines
  * from a rendered string. Used by test_wrap_phantom_list_reserves_last_column
  * to compare prettified rendered output (which contains dim escapes and the
- * • glyph) against a normalized expected content string. */
+ * - glyph) against a normalized expected content string. */
 static char *strip_ansi_ws(const char *s)
 {
     size_t len = strlen(s);
@@ -2090,7 +2090,7 @@ static char *strip_ansi_ws(const char *s)
 
 /* Return a whitespace-stripped expected content string for a list item input
  * with its marker normalized to the rendered form:
- *   `- ` / `* ` / `+ ` (possibly with leading spaces) → `•` (U+2022, 3 bytes)
+ *   `- ` / `* ` / `+ ` (possibly with leading spaces) → `-`
  *   `N. ` / `N) ` (possibly with leading spaces) → digits + `.`/`)` verbatim
  * Everything else passes through; whitespace is then stripped by strip_ws. */
 static char *expected_list_content(const char *input)
@@ -2103,10 +2103,7 @@ static char *expected_list_content(const char *input)
     size_t n = 0;
     /* Unordered bullet: replace marker with bullet glyph (no leading spaces). */
     if ((*p == '-' || *p == '*' || *p == '+') && p[1] == ' ') {
-        /* bullet glyph U+2022 = \xe2\x80\xa2 */
-        buf[n++] = '\xe2';
-        buf[n++] = '\x80';
-        buf[n++] = '\xa2';
+        buf[n++] = '-';
         p += 2; /* skip marker + space */
     } else if (*p >= '0' && *p <= '9') {
         /* Ordered: keep digits + delimiter verbatim. */
@@ -2166,7 +2163,7 @@ static void test_wrap_phantom_reserves_last_column(void)
  * scheme is meant to keep clear. Each marker's continuation indent must
  * still wrap one cell inside the edge and lose no glyph.
  *
- * With prettification, vis now contains ANSI escapes and the "•" glyph
+ * With prettification, vis now contains ANSI escapes and the "-" glyph
  * instead of the literal `-`/`*`/`+` marker, so we compare
  * strip_ansi_ws(vis) against expected_list_content(input): the input's
  * marker is normalized to the rendered form and then whitespace-stripped,
@@ -2254,7 +2251,7 @@ static void test_wrap_long_word_overflow(void)
 static void test_wrap_list_indent(void)
 {
     /* Bullet list: continuation row indents under the marker. The
-     * marker ("• ") is 2 cells, so continuation rows carry a 2-cell
+     * marker ("- ") is 2 cells, so continuation rows carry a 2-cell
      * hanging indent and wrap at wrap_width (20) like the first row. */
     char *got = render_wrap("* alpha beta gamma delta epsilon zeta", 20);
     EXPECT_STR_EQ(got, BUL "alpha beta gamma\n  delta epsilon zeta");
@@ -2273,7 +2270,7 @@ static void test_wrap_nested_bullet_hanging_indent(void)
 {
     /* Nested list: parent at col 0, child indented 2. The child's
      * wrap continuation must indent under its own content column
-     * (col 4 = 2 leading spaces + "• ") rather than col 0. The indent
+     * (col 4 = 2 leading spaces + "- ") rather than col 0. The indent
      * fits within wrap_width, so the continuation rows wrap at
      * wrap_width like everything else (current_row_budget) — no
      * overshoot, keeping the reserved last column clear. */
