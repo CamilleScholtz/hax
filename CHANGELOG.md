@@ -18,6 +18,7 @@ notes (see [docs/releasing.md](docs/releasing.md)).
   first/last row. Ctrl-P/Ctrl-N still recall history directly.
 - Downstream: the interactive prompt uses ASCII `>` instead of `❯`.
 - Downstream: the shared spinner uses ASCII frames (`| / - \`).
+- Downstream: banner and submitted-prompt gutters use `|` instead of `▌`.
 
 - Custom providers no longer take their models.dev catalog identity from their own name; set
   `catalog_id` explicitly (for example `"catalog_id": "groq"`) to keep pricing and context

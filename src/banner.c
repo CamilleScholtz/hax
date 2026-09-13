@@ -19,7 +19,7 @@
 
 static const char *banner_bar(char *buffer, size_t size)
 {
-    snprintf(buffer, size, "%s▌%s", theme_open(THEME_CHROME), theme_close(THEME_CHROME));
+    snprintf(buffer, size, "%s|%s", theme_open(THEME_CHROME), theme_close(THEME_CHROME));
     return buffer;
 }
 

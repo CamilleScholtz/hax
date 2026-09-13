@@ -194,7 +194,7 @@ static void test_user_message_uses_section_rule_without_line_prefix(void)
     EXPECT(contains(out, ANSI_BRIGHT_MAGENTA));
     EXPECT(contains(out, "hello"));
 
-    EXPECT(!contains(out, "▌ "));
+    EXPECT(!contains(out, "| "));
     free(out);
 }
 
@@ -227,7 +227,7 @@ static void test_user_multiline_raw(void)
     char *out = render_to_string(NULL, items, 1);
     EXPECT(contains(out, "one" ANSI_FG_DEFAULT "\n" ANSI_BRIGHT_MAGENTA "two"));
     EXPECT(count_occurrences(out, ANSI_BRIGHT_MAGENTA) == 2);
-    EXPECT(!contains(out, "▌ "));
+    EXPECT(!contains(out, "| "));
     free(out);
 }
 

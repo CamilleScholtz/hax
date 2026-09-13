@@ -649,7 +649,7 @@ static void test_marker_separates_from_next_block(void)
     char *out = render(HISTORY_FULL, items, 2, 0);
     char *plain = strip_sgr(out);
     EXPECT(strstr(plain, "conversation compacted ──\n\n") != NULL);
-    EXPECT(strstr(plain, "compacted ──\xE2\x96\x8C") == NULL);
+    EXPECT(strstr(plain, "compacted ──|") == NULL);
     free(plain);
     free(out);
 

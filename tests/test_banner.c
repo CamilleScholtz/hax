@@ -50,7 +50,7 @@ static void test_identity_single_row(void)
     struct provider provider = {.name = "mock"};
     struct agent_session session = {.model = (char *)"model-a", .effort = (char *)"high"};
     char *out = identity_rows(&provider, &session);
-    EXPECT_STR_EQ(out, "▌ hax › mock · model-a · high\n");
+    EXPECT_STR_EQ(out, "| hax › mock · model-a · high\n");
     free(out);
 }
 
@@ -63,8 +63,8 @@ static void test_identity_breaks_after_provider(void)
     struct agent_session session = {.model = (char *)"abcdefghijklmnopqrstuv",
                                     .effort = (char *)"high"};
     char *out = identity_rows(&provider, &session);
-    EXPECT_STR_EQ(out, "▌ hax › mock\n"
-                       "▌   abcdefghijklmnopqrstuv · high\n");
+    EXPECT_STR_EQ(out, "| hax › mock\n"
+                       "|   abcdefghijklmnopqrstuv · high\n");
     free(out);
 }
 
@@ -75,10 +75,10 @@ static void test_identity_wraps_oversized_model(void)
     struct provider provider = {.name = "mock"};
     struct agent_session session = {.model = (char *)"deepseek-ai/DeepSeek-R1-Distill-Llama-70B"};
     char *out = identity_rows(&provider, &session);
-    EXPECT_STR_EQ(out, "▌ hax › mock\n"
-                       "▌   deepseek-ai/Deep\n"
-                       "▌   Seek-R1-Distill-\n"
-                       "▌   Llama-70B\n");
+    EXPECT_STR_EQ(out, "| hax › mock\n"
+                       "|   deepseek-ai/Deep\n"
+                       "|   Seek-R1-Distill-\n"
+                       "|   Llama-70B\n");
     free(out);
 }
 
@@ -86,7 +86,7 @@ static void test_identity_no_provider(void)
 {
     setenv("HAX_DISPLAY_WIDTH", "100", 1);
     char *out = identity_rows(NULL, NULL);
-    EXPECT_STR_EQ(out, "▌ hax › no provider — use /provider\n");
+    EXPECT_STR_EQ(out, "| hax › no provider — use /provider\n");
     free(out);
 }
 
@@ -96,7 +96,7 @@ static void test_identity_no_model(void)
     struct provider provider = {.name = "mock"};
     struct agent_session session = {0};
     char *out = identity_rows(&provider, &session);
-    EXPECT_STR_EQ(out, "▌ hax › mock · no model — use /model (or /provider)\n");
+    EXPECT_STR_EQ(out, "| hax › mock · no model — use /model (or /provider)\n");
     free(out);
 }
 
@@ -106,9 +106,9 @@ static void test_identity_no_model_wraps_on_narrow_terminal(void)
     struct provider provider = {.name = "mock"};
     struct agent_session session = {0};
     char *out = identity_rows(&provider, &session);
-    EXPECT_STR_EQ(out, "▌ hax › mock\n"
-                       "▌   no model — use /model (or\n"
-                       "▌   /provider)\n");
+    EXPECT_STR_EQ(out, "| hax › mock\n"
+                       "|   no model — use /model (or\n"
+                       "|   /provider)\n");
     free(out);
 }
 
@@ -119,7 +119,7 @@ static void test_identity_shows_preset_stance(void)
     struct provider provider = {.name = "mock"};
     struct agent_session session = {.model = (char *)"model-a", .effort = (char *)"high"};
     char *out = identity_rows(&provider, &session);
-    EXPECT_STR_EQ(out, "▌ hax [fast] › mock · model-a · high\n");
+    EXPECT_STR_EQ(out, "| hax [fast] › mock · model-a · high\n");
     free(out);
     unsetenv("HAX_PRESET");
 }
@@ -130,7 +130,7 @@ static void test_identity_prefers_model_label(void)
     struct provider provider = {.name = "mock"};
     struct agent_session session = {.model = (char *)"model-a", .model_label = (char *)"Model A"};
     char *out = identity_rows(&provider, &session);
-    EXPECT_STR_EQ(out, "▌ hax › mock · Model A\n");
+    EXPECT_STR_EQ(out, "| hax › mock · Model A\n");
     free(out);
 }
 
@@ -159,8 +159,8 @@ static void test_print_adds_key_tips(void)
     fclose(tmp);
 
     char *out = strip_sgr(raw);
-    EXPECT_STR_EQ(out, "▌ hax › mock · model-a\n"
-                       "▌ ctrl-d quit · try /help\n");
+    EXPECT_STR_EQ(out, "| hax › mock · model-a\n"
+                       "| ctrl-d quit · try /help\n");
     free(out);
 }
 

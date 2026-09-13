@@ -5,8 +5,28 @@
 
 #include "harness.h"
 #include "xalloc.h"
+#include "terminal/ansi.h"
 #include "terminal/input.h"
 #include "terminal/input_core.h"
+#include "terminal/theme.h"
+
+static void test_submitted_message_ascii_gutter(void)
+{
+    char *out = NULL;
+    size_t len = 0;
+    FILE *stream = open_memstream(&out, &len);
+    EXPECT(stream != NULL);
+    if (!stream)
+        return;
+    EXPECT(theme_set("off") == 0);
+    input_render_user_message_to(stream, "abc def\nx", 9, 7);
+    fclose(stream);
+    EXPECT_STR_EQ(out, "| abc " ANSI_ERASE_LINE "\r\n"
+                       "| def" ANSI_ERASE_LINE "\r\n"
+                       "| x" ANSI_ERASE_LINE "\r\n");
+    free(out);
+    EXPECT(theme_set("ansi") == 0);
+}
 
 static char *history_fixture(const char *body)
 {
@@ -178,6 +198,7 @@ static void test_modal_key_table_full(void)
 
 int main(void)
 {
+    test_submitted_message_ascii_gutter();
     test_history_load_is_read_only();
     test_history_open_appends();
     test_history_missing_file();
