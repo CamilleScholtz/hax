@@ -21,6 +21,7 @@ notes (see [docs/releasing.md](docs/releasing.md)).
 - Downstream: banner and submitted-prompt gutters use `|` instead of `▌`.
 - Downstream: banner and tool markers use `>` instead of `›`.
 - Downstream: rendered bullets use `-` instead of `•`.
+- Downstream: progress bars use `#` for fill and `.` for the empty track instead of `█`/`░`.
 
 - Custom providers no longer take their models.dev catalog identity from their own name; set
   `catalog_id` explicitly (for example `"catalog_id": "groq"`) to keep pricing and context
