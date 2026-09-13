@@ -34,7 +34,6 @@
 #include "render/spinner.h"
 #include "system/clock.h"
 #include "system/fs.h"
-#include "system/locale.h"
 #include "system/spawn.h"
 #include "system/tempfiles.h"
 #include "terminal/ansi.h"
@@ -48,14 +47,10 @@
 #include "tools/bash_process.h"
 #include "tools/task_registry.h"
 
-/* Use ASCII unless wcwidth() can measure the themed UTF-8 glyph correctly. */
 static const char *build_prompt(char *buffer, size_t size)
 {
-    if (locale_have_utf8())
-        snprintf(buffer, size, "%s" ANSI_BOLD "❯" ANSI_BOLD_OFF "%s ", theme_open(THEME_ACCENT),
-                 theme_close(THEME_ACCENT));
-    else
-        snprintf(buffer, size, ANSI_BOLD ">" ANSI_BOLD_OFF " ");
+    snprintf(buffer, size, "%s" ANSI_BOLD ">" ANSI_BOLD_OFF "%s ", theme_open(THEME_ACCENT),
+             theme_close(THEME_ACCENT));
     return buffer;
 }
 
