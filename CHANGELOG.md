@@ -41,6 +41,9 @@ notes (see [docs/releasing.md](docs/releasing.md)).
 - The brief history shown on resume now names the task a `task_wait` call waited on, as the
   live header does, instead of a bare `[task_wait]` line. Collapsed tool rows that need
   truncation now keep their suffix, such as a read's line range, like the full header does.
+- Background task completion notes say whether output is pending or there is nothing to
+  collect, and `task_wait` on an already collected task reports its final status instead of
+  `no such task`.
 
 ## [0.5.0] - 2026-09-04
 
