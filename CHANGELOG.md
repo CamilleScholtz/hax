@@ -14,6 +14,8 @@ notes (see [docs/releasing.md](docs/releasing.md)).
 
 ### Changed
 
+- Prompt and tool guidance favor native tools for ordinary file operations, and backgrounding when
+  there is useful work to overlap rather than an immediate wait.
 - Custom providers no longer take their models.dev catalog identity from their own name; set
   `catalog_id` explicitly (for example `"catalog_id": "groq"`) to keep pricing and context
   metadata. Local servers and proxies without one never contact models.dev. See

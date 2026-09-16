@@ -484,11 +484,11 @@ static const char SUBAGENTS_PROMPT[] =
     "\n"
     "`hax -p \"<task>\"` (via the bash tool) runs a fresh hax instance with clean context in this "
     "directory and prints its final answer to stdout. Delegate to subagents only when the user "
-    "asks for it. The child inherits this session's provider, model, and effort. Launch each "
-    "subagent with `background: true` and collect answers with task_wait — that is also how "
-    "several run in parallel. The child prints its session id to stderr at startup (captured in "
-    "the task log); follow up on a finished (or killed) run with `hax --resume=<id> -p "
-    "\"<follow-up>\"`.\n";
+    "asks for it. The child inherits this session's provider, model, and effort. For concurrent "
+    "work, launch subagents with `background: true` and collect answers with task_wait; a "
+    "synchronous call is simpler when you would otherwise wait immediately. The child prints its "
+    "session id to stderr at startup; follow up on a finished (or killed) run with `hax "
+    "--resume=<id> -p \"<follow-up>\"`.\n";
 
 /* Task-less variant: synchronous calls need a wide timeout to survive a slow child. */
 static const char SUBAGENTS_PROMPT_NO_TASKS[] =
