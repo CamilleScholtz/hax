@@ -155,13 +155,12 @@ static const char BASH_DESCRIPTION[] =
     "- Each call starts in the working directory listed under `# Environment`; `cd` does not "
     "persist across calls.\n"
     "- Follow the command preferences under `# Environment` when present.\n"
-    "- Usually omit `timeout_seconds`: a command that outlives the default timeout (120s) is "
-    "not killed — it detaches into a background task and you will be notified when it "
-    "finishes.\n"
-    "- Set `background` for commands meant to run alongside other work (servers, watchers, "
-    "long builds, subagents): the call returns after a brief initial-output window and the "
-    "command continues as a task. No trailing `&`: the task tracks the shell, and processes "
-    "orphaned by an exited shell are killed.";
+    "- Usually omit `timeout_seconds`: a command that outlives the default timeout (120s) is not "
+    "killed — it detaches into a background task and you will be notified when it finishes.\n"
+    "- Set `background` for commands meant to run alongside other work (servers, watchers, long "
+    "builds, subagents): the call returns after a brief initial-output window and the command "
+    "continues as a task. No trailing `&`: the task tracks the shell, and processes orphaned by an "
+    "exited shell are killed.";
 
 static const struct tool_param BASH_PARAMS[] = {
     {.name = "command", .type = "string", .required = 1, .description = "Shell command to run."},
