@@ -14,6 +14,9 @@ notes (see [docs/releasing.md](docs/releasing.md)).
 
 ### Changed
 
+- Downstream: the ANSI theme uses yellow (its closest standard color to orange) for input,
+  prompts, and picker selections instead of bright magenta.
+
 - Downstream: Up/Down move through displayed prompt rows before recalling history at the
   first/last row. Ctrl-P/Ctrl-N still recall history directly.
 - Downstream: prompts, banner gutters and markers, tool output, and picker selections use `┃`

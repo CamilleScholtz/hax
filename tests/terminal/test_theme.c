@@ -26,7 +26,7 @@ static void expect_all_roles_defined(void)
 static void test_default_is_ansi(void)
 {
     EXPECT_STR_EQ(theme_name(), "ansi");
-    EXPECT_STR_EQ(theme_open(THEME_ACCENT), ANSI_BRIGHT_MAGENTA);
+    EXPECT_STR_EQ(theme_open(THEME_ACCENT), ANSI_YELLOW);
     EXPECT_STR_EQ(theme_close(THEME_ACCENT), ANSI_FG_DEFAULT);
     EXPECT_STR_EQ(theme_open(THEME_CHROME), ANSI_CYAN);
     EXPECT_STR_EQ(theme_open(THEME_CHROME_DIM), ANSI_DIM ANSI_CYAN);
@@ -105,7 +105,7 @@ static void test_theme_set_validation(void)
     EXPECT_STR_EQ(theme_name(), "off");
 
     EXPECT(theme_set("ansi") == 0);
-    EXPECT_STR_EQ(theme_open(THEME_ACCENT), ANSI_BRIGHT_MAGENTA);
+    EXPECT_STR_EQ(theme_open(THEME_ACCENT), ANSI_YELLOW);
 }
 
 static void test_tint_roles(void)

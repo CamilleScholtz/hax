@@ -43,7 +43,7 @@ static const struct theme_preset THEME_PRESETS[] = {
     {
         .name = "ansi",
         .roles = {
-            [THEME_ACCENT]      = COLOR_STYLE(ANSI_BRIGHT_MAGENTA),
+            [THEME_ACCENT]      = COLOR_STYLE(ANSI_YELLOW),
             [THEME_CHROME]      = COLOR_STYLE(ANSI_CYAN),
             [THEME_CHROME_DIM]  = ROLE_STYLE(ANSI_DIM ANSI_CYAN, ANSI_FG_DEFAULT ANSI_BOLD_OFF),
             [THEME_STANCE]      = COLOR_STYLE(ANSI_CYAN),

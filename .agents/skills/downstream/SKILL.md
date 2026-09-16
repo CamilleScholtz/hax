@@ -10,6 +10,8 @@ that may not fit upstream. Upstream acceptance is not a requirement for local fe
 
 ## Intended differences
 
+- The ANSI theme uses yellow, the closest standard ANSI color to orange, for the user accent.
+
 - Up/Down move within the prompt's displayed rows, including soft wraps. Only Up on the first
   row or Down on the last row recalls history. Ctrl-P/Ctrl-N remain direct history shortcuts.
 - Prompts, banner gutters and markers, tool output, and picker selections use `┃` sidebars.

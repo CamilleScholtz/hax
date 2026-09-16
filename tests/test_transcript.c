@@ -191,7 +191,7 @@ static void test_user_message_uses_section_rule_without_line_prefix(void)
     char *out = render_to_string(NULL, items, 1);
 
     EXPECT(contains(out, "── user ──"));
-    EXPECT(contains(out, ANSI_BRIGHT_MAGENTA));
+    EXPECT(contains(out, ANSI_YELLOW));
     EXPECT(contains(out, "hello"));
 
     EXPECT(!contains(out, "| "));
@@ -206,7 +206,7 @@ static void test_synthetic_user_messages_have_distinct_labels(void)
     char *out = render_to_string(NULL, items, 1);
     EXPECT(contains(out, "── compaction seed ──"));
     EXPECT(!contains(out, "── user ──"));
-    EXPECT(!contains(out, ANSI_BRIGHT_MAGENTA));
+    EXPECT(!contains(out, ANSI_YELLOW));
 
     EXPECT(contains(out, ANSI_DIM "line one" ANSI_RESET "\n" ANSI_DIM "line two" ANSI_RESET));
     free(out);
@@ -217,7 +217,7 @@ static void test_synthetic_user_messages_have_distinct_labels(void)
     char *continuation_output = render_to_string(NULL, continuation_items, 1);
     EXPECT(contains(continuation_output, "── continuation ──"));
     EXPECT(!contains(continuation_output, "── user ──"));
-    EXPECT(!contains(continuation_output, ANSI_BRIGHT_MAGENTA));
+    EXPECT(!contains(continuation_output, ANSI_YELLOW));
     free(continuation_output);
 }
 
@@ -225,8 +225,8 @@ static void test_user_multiline_raw(void)
 {
     struct item items[] = {{.kind = ITEM_USER_MESSAGE, .text = (char *)"one\ntwo"}};
     char *out = render_to_string(NULL, items, 1);
-    EXPECT(contains(out, "one" ANSI_FG_DEFAULT "\n" ANSI_BRIGHT_MAGENTA "two"));
-    EXPECT(count_occurrences(out, ANSI_BRIGHT_MAGENTA) == 2);
+    EXPECT(contains(out, "one" ANSI_FG_DEFAULT "\n" ANSI_YELLOW "two"));
+    EXPECT(count_occurrences(out, ANSI_YELLOW) == 2);
     EXPECT(!contains(out, "| "));
     free(out);
 }
