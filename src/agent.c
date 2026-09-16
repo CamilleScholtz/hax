@@ -49,7 +49,7 @@
 
 static const char *build_prompt(char *buffer, size_t size)
 {
-    snprintf(buffer, size, "%s" ANSI_BOLD ">" ANSI_BOLD_OFF "%s ", theme_open(THEME_ACCENT),
+    snprintf(buffer, size, "%s" ANSI_BOLD "┃" ANSI_BOLD_OFF "%s ", theme_open(THEME_ACCENT),
              theme_close(THEME_ACCENT));
     return buffer;
 }

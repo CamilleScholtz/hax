@@ -7,9 +7,11 @@
 #include "buf.h"
 #include "harness.h"
 #include "xalloc.h"
+#include "render/ctrl_strip.h"
 #include "render/spinner.h"
 #include "system/locale.h"
 #include "terminal/ansi.h"
+#include "text/width.h"
 
 static char capture_buf[4096];
 
@@ -43,11 +45,25 @@ static const char *capture_read(void)
     return capture_buf;
 }
 
-static void test_glyph_is_one_ascii_character(void)
+static void test_glyph_pulses_in_brightness(void)
 {
-    const char *glyph = spinner_glyph_now();
-    EXPECT(strlen(glyph) == 1);
-    EXPECT(strchr("|/-\\", glyph[0]) != NULL);
+    const char *frames[] = {
+        ANSI_BOLD_OFF ANSI_DIM "•" ANSI_BOLD_OFF,
+        ANSI_BOLD_OFF "•",
+        ANSI_BOLD_OFF ANSI_BOLD "•" ANSI_BOLD_OFF,
+        ANSI_BOLD_OFF "•",
+    };
+    for (long i = 0; i < 4; i++) {
+        const char *glyph = spinner_glyph_at(i * 320);
+        EXPECT_STR_EQ(glyph, frames[i]);
+        char *visible = ctrl_strip_dup(glyph);
+        EXPECT_STR_EQ(visible, "•");
+        EXPECT(display_cells(visible) == SPINNER_GLYPH_COLS);
+        free(visible);
+        EXPECT_STR_EQ(spinner_glyph_at(i * 320 + 319), frames[i]);
+    }
+    EXPECT_STR_EQ(spinner_glyph_at(1280), frames[0]);
+    EXPECT_STR_EQ(spinner_glyph_at(-1), frames[0]);
 }
 
 /* All spinner entry points must be silent no-ops on the NULL spinner non-TTY runs carry. */
@@ -71,7 +87,7 @@ static void test_spinner_is_null_and_silent_without_tty(void)
     EXPECT_STR_EQ(capture_read(), "");
 }
 
-#define FRAME_CHROME ANSI_DIM ANSI_CYAN
+#define FRAME_CHROME ANSI_CYAN
 
 static void test_tool_frame_paints_rows_verbatim(void)
 {
@@ -79,16 +95,17 @@ static void test_tool_frame_paints_rows_verbatim(void)
     buf_init(&frame);
     struct spinner_tool_frame painted;
     struct spinner_row rows[] = {{.bytes = "<older>", .cells = 7},
-                                 {.bytes = "<newest>", .cells = 8}};
+                                 {.bytes = "  <newest>", .cells = 10}};
 
-    spinner_build_tool_frame(&frame, rows, 2, "*", 80, NULL, &painted);
+    spinner_build_tool_frame(&frame, rows, 2, spinner_glyph_at(0), 80, NULL, &painted);
     EXPECT_STR_EQ(frame.data, ANSI_SYNC_BEGIN "\r"
                                               "<older>" ANSI_ERASE_LINE "\r\n"
-                                              "<newest>" ANSI_ERASE_BELOW "\r" FRAME_CHROME
-                                              "*" ANSI_RESET ANSI_SYNC_END);
+                                              "  <newest>" ANSI_ERASE_BELOW
+                                              "\r" FRAME_CHROME ANSI_BOLD_OFF ANSI_DIM
+                                              "•" ANSI_BOLD_OFF ANSI_RESET ANSI_SYNC_END);
     EXPECT(painted.row_count == 2);
     EXPECT(painted.row_widths[0] == 7);
-    EXPECT(painted.row_widths[1] == 8);
+    EXPECT(painted.row_widths[1] == 10);
     buf_free(&frame);
 }
 
@@ -137,7 +154,7 @@ static void test_tool_frame_climb_excludes_wrapped_last_row(void)
 int main(void)
 {
     capture_init();
-    test_glyph_is_one_ascii_character();
+    test_glyph_pulses_in_brightness();
     test_spinner_is_null_and_silent_without_tty();
     test_tool_frame_paints_rows_verbatim();
     test_tool_frame_climb_accounts_for_reflow();

@@ -12,10 +12,12 @@ that may not fit upstream. Upstream acceptance is not a requirement for local fe
 
 - Up/Down move within the prompt's displayed rows, including soft wraps. Only Up on the first
   row or Down on the last row recalls history. Ctrl-P/Ctrl-N remain direct history shortcuts.
-- The interactive prompt uses `>`, the shared spinner uses `| / - \`, and banner and
-  submitted-prompt gutters use `|`. Markers use `>`, rendered bullets use `-`, and progress bars
-  use `#` for fill and `.` for the empty track. This is a presentation preference, not a
-  restriction on Unicode in prompts, model output, files, or other UI elements.
+- Prompts, banner gutters and markers, tool output, and picker selections use `┃` sidebars.
+  Editable input repeats its sidebar on wrapped and blank rows, including clipped views.
+  Tool headers use `┃ bash` rather than `[bash]`, with `┃` on wrapped continuation rows too.
+  Omitted tool output uses `┇`; the shared spinner is a single `•` that pulses in brightness.
+  Rendered bullets use `-`, and progress bars use `█` for fill and `░` for the empty track.
+  This is a presentation preference, not a restriction on Unicode in content or other UI elements.
 
 ## Making changes
 
@@ -38,6 +40,6 @@ that may not fit upstream. Upstream acceptance is not a requirement for local fe
   Pay particular attention to `src/terminal/input_core.c`, arrow dispatch in
   `src/terminal/input.c`, the prompt in `src/agent.c`, `src/banner.c`, and `src/render/spinner.c`.
 - Run the full tests and lint after integration. Check multiline editing, history boundaries,
-  and ASCII indicators in a dedicated tmux session as described in `AGENTS.md`.
+  and sidebar indicators in a dedicated tmux session as described in `AGENTS.md`.
 - If upstream changes make a local feature costly to retain, explain the conflict and ask before
   dropping the preference or introducing a larger subsystem.

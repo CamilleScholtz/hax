@@ -5,14 +5,19 @@
 #include <unistd.h>
 
 #include "agent_dispatch.h"
+#include "config.h"
 #include "harness.h"
 #include "provider.h"
 #include "tool.h"
 #include "xalloc.h"
+#include "render/ctrl_strip.h"
 #include "render/markdown.h"
 #include "render/render_ctx.h"
 #include "render/spinner.h"
 #include "system/locale.h"
+#include "terminal/ansi.h"
+#include "terminal/theme.h"
+#include "text/width.h"
 
 static char *run_mode_probe(const char *args_json, struct tool_run_ctx *ctx)
 {
@@ -47,10 +52,17 @@ static const struct tool TOOL_TAIL_PROBE = {
     .display = {.preview_mode = TOOL_PREVIEW_HEAD_TAIL},
 };
 
+static const struct tool TOOL_HEADER_PROBE = {
+    .def = {.name = "bash"},
+    .display = {.arg_name = "command", .header_rows = 3},
+};
+
 /* agent_find_tool lives in agent_core.c alongside the full tool table; stub it
  * so this test links only its own tools and the render stack. */
 const struct tool *agent_find_tool(const char *name)
 {
+    if (strcmp(name, "bash") == 0)
+        return &TOOL_HEADER_PROBE;
     if (strcmp(name, "write") == 0)
         return &TOOL_WRITE;
     if (strcmp(name, "mode-probe") == 0)
@@ -252,9 +264,42 @@ static void test_hidden_tail_not_displayed_by_fallback(void)
     item_free(&call);
 }
 
+static void test_wrapped_header_has_sidebar_on_every_row(void)
+{
+    struct item call = {
+        .kind = ITEM_TOOL_CALL,
+        .tool_name = (char *)"bash",
+        .tool_arguments_json =
+            (char
+                 *)"{\"command\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"}",
+    };
+    struct render_ctx render = {0};
+    config_set_override("display_width", "20");
+    cap_reset();
+    render_tool_call_header(&render, &call);
+    config_set_override("display_width", NULL);
+    const char *raw = cap_read();
+    char *plain = ctrl_strip_dup(raw);
+    EXPECT(strstr(plain, "┃ bash aaaaaaaaaaaaa\n┃ aaaaaaaaaaaaaaaaaa\n┃ aaaaaaaaaaaaaaa...\n") !=
+           NULL);
+    char *next = NULL;
+    int rows = 0;
+    for (char *row = strtok_r(plain, "\n", &next); row; row = strtok_r(NULL, "\n", &next)) {
+        EXPECT(display_cells(row) <= 20);
+        EXPECT(strncmp(row, "┃ ", strlen("┃ ")) == 0);
+        rows++;
+    }
+    EXPECT(rows == 3);
+    char *continuation = xasprintf("%s┃ %s%s", theme_open(THEME_CHROME), ANSI_RESET, ANSI_BOLD);
+    EXPECT(strstr(raw, continuation) != NULL);
+    free(continuation);
+    free(plain);
+}
+
 int main(void)
 {
     cap_init();
+    test_wrapped_header_has_sidebar_on_every_row();
     test_blank_content_summary_row_displayed();
     test_control_only_content_summary_row_displayed();
     test_visible_content_shows_preview_not_summary();

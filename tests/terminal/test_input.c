@@ -3,8 +3,10 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 
+#include "buf.h"
 #include "harness.h"
 #include "xalloc.h"
+#include "system/locale.h"
 #include "terminal/ansi.h"
 #include "terminal/input.h"
 #include "terminal/input_core.h"
@@ -21,11 +23,53 @@ static void test_submitted_message_ascii_gutter(void)
     EXPECT(theme_set("off") == 0);
     input_render_user_message_to(stream, "abc def\nx", 9, 7);
     fclose(stream);
-    EXPECT_STR_EQ(out, "| abc " ANSI_ERASE_LINE "\r\n"
-                       "| def" ANSI_ERASE_LINE "\r\n"
-                       "| x" ANSI_ERASE_LINE "\r\n");
+    EXPECT_STR_EQ(out, "┃ abc " ANSI_ERASE_LINE "\r\n"
+                       "┃ def" ANSI_ERASE_LINE "\r\n"
+                       "┃ x" ANSI_ERASE_LINE "\r\n");
     free(out);
     EXPECT(theme_set("ansi") == 0);
+}
+
+static void test_edit_rows_repeat_prompt_gutter(void)
+{
+    struct input in = {
+        .buf = (char *)"abc def\n\nx",
+        .len = 10,
+        .prompt = ANSI_BOLD "┃" ANSI_BOLD_OFF " ",
+        .display_columns = 7,
+    };
+    struct buf frame;
+    buf_init(&frame);
+    input_render_edit_rows(&frame, &in, 0, 3);
+    EXPECT_STR_EQ(frame.data, ANSI_BOLD "┃" ANSI_BOLD_OFF " abc " ANSI_ERASE_LINE "\r\n" ANSI_BOLD
+                                        "┃" ANSI_BOLD_OFF " def" ANSI_ERASE_LINE "\r\n" ANSI_BOLD
+                                        "┃" ANSI_BOLD_OFF " " ANSI_ERASE_LINE "\r\n" ANSI_BOLD
+                                        "┃" ANSI_BOLD_OFF " x");
+
+    buf_reset(&frame);
+    input_render_edit_rows(&frame, &in, 1, 2);
+    EXPECT_STR_EQ(frame.data, ANSI_BOLD "┃" ANSI_BOLD_OFF " def" ANSI_ERASE_LINE "\r\n" ANSI_BOLD
+                                        "┃" ANSI_BOLD_OFF " ");
+    buf_free(&frame);
+}
+
+static void test_search_continuations_stay_at_column_zero(void)
+{
+    struct input in = {
+        .buf = (char *)"a\nb",
+        .len = 3,
+        .prompt = "search: ",
+        .display_columns = 20,
+        .continuation_at_column_zero = 1,
+    };
+    struct buf frame;
+    buf_init(&frame);
+    input_render_edit_rows(&frame, &in, 0, 1);
+    EXPECT_STR_EQ(frame.data, "search: a" ANSI_ERASE_LINE "\r\nb");
+    buf_reset(&frame);
+    input_render_edit_rows(&frame, &in, 1, 1);
+    EXPECT_STR_EQ(frame.data, "b");
+    buf_free(&frame);
 }
 
 static char *history_fixture(const char *body)
@@ -198,6 +242,9 @@ static void test_modal_key_table_full(void)
 
 int main(void)
 {
+    locale_init_utf8();
+    test_edit_rows_repeat_prompt_gutter();
+    test_search_continuations_stay_at_column_zero();
     test_submitted_message_ascii_gutter();
     test_history_load_is_read_only();
     test_history_open_appends();

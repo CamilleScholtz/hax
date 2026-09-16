@@ -18,7 +18,7 @@
 #include "text/fmt.h"
 #include "text/width.h"
 
-#define FRAME_INTERVAL_MS 80
+#define FRAME_INTERVAL_MS 320
 #define LABEL_SETTLE_MS   2000
 #define TIMER_MIN_MS      30000
 /* An indicator that would be replaced this quickly reads as flicker, not feedback. */
@@ -27,7 +27,12 @@
 #define DEFAULT_LABEL     "working..."
 #define DEFAULT_LABEL_KEY "working"
 
-static const char *const SPINNER_FRAMES[] = {"|", "/", "-", "\\"};
+static const char *const SPINNER_FRAMES[] = {
+    ANSI_BOLD_OFF ANSI_DIM "•" ANSI_BOLD_OFF,
+    ANSI_BOLD_OFF "•",
+    ANSI_BOLD_OFF ANSI_BOLD "•" ANSI_BOLD_OFF,
+    ANSI_BOLD_OFF "•",
+};
 #define SPINNER_FRAME_COUNT (sizeof(SPINNER_FRAMES) / sizeof(SPINNER_FRAMES[0]))
 
 enum spinner_mode {
@@ -69,9 +74,8 @@ struct spinner {
     struct spinner_tool_frame painted_frame;
 };
 
-const char *spinner_glyph_now(void)
+const char *spinner_glyph_at(long now_ms)
 {
-    long now_ms = monotonic_ms();
     if (now_ms < 0)
         now_ms = 0;
     size_t frame = (size_t)(now_ms / FRAME_INTERVAL_MS) % SPINNER_FRAME_COUNT;
@@ -88,13 +92,14 @@ static void finish_row_repaint(void)
 static void draw_label_row_locked(struct spinner *spinner, const char *glyph)
 {
     /* Reserve the last terminal column because filling it can trigger deferred autowrap. */
-    int label_budget = term_width() - 1 - 2; /* glyph and separating space */
+    int label_budget = term_width() - 1 - (SPINNER_GLYPH_COLS + 1);
     if (label_budget < 0)
         label_budget = 0;
 
-    fputs("\r" ANSI_DIM, stdout);
+    fputs("\r", stdout);
+    fputs(theme_open(THEME_CHROME), stdout);
     fputs(glyph, stdout);
-    fputc(' ', stdout);
+    fputs(ANSI_RESET ANSI_DIM " ", stdout);
 
     if (spinner->timer_started_at_ms > 0) {
         long elapsed_ms = monotonic_ms() - spinner->timer_started_at_ms;
@@ -116,11 +121,11 @@ static void draw_label_row_locked(struct spinner *spinner, const char *glyph)
     finish_row_repaint();
 }
 
-/* The animated gutter overprints the row's first cell, so it must follow the row's erase. */
+/* The animated gutter overprints the row's reserved gutter, so it must follow the row's erase. */
 static void append_glyph_overprint(struct buf *out, const char *glyph)
 {
     buf_append_str(out, "\r");
-    buf_append_str(out, theme_open(THEME_CHROME_DIM));
+    buf_append_str(out, theme_open(THEME_CHROME));
     buf_append_str(out, glyph);
     buf_append_str(out, ANSI_RESET);
 }
@@ -160,7 +165,7 @@ void spinner_build_tool_frame(struct buf *frame, const struct spinner_row *rows,
 static void draw_glyph_only_locked(const char *glyph)
 {
     fputs("\r", stdout);
-    fputs(theme_open(THEME_CHROME_DIM), stdout);
+    fputs(theme_open(THEME_CHROME), stdout);
     fputs(glyph, stdout);
     fputs(ANSI_RESET, stdout);
     fflush(stdout);
@@ -194,7 +199,7 @@ static void draw_tool_view_locked(struct spinner *spinner, const char *glyph)
 
 static void draw_frame_locked(struct spinner *spinner)
 {
-    const char *glyph = spinner_glyph_now();
+    const char *glyph = spinner_glyph_at(monotonic_ms());
 
     switch (spinner->mode) {
     case SPINNER_HIDDEN:

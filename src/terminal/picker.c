@@ -294,7 +294,7 @@ static void render_row(struct buf *output, const struct picker *picker, size_t m
 
     if (selected)
         buf_append_str(output, theme_open(THEME_ACCENT));
-    buf_append_str(output, selected ? (use_utf8 ? "\xe2\x86\x92 " : "> ") : "  "); /* → */
+    buf_append_str(output, selected ? (use_utf8 ? "┃ " : "> ") : "  ");
     if (selected)
         buf_append_str(output, theme_close(THEME_ACCENT));
 

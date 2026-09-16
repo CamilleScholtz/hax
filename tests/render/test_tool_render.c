@@ -10,10 +10,8 @@
 #include "system/locale.h"
 #include "terminal/ansi.h"
 
-#define STRIP_FIRST      ANSI_DIM ANSI_CYAN "\xE2\x94\x8C " ANSI_RESET
-#define STRIP_BODY       ANSI_DIM ANSI_CYAN "\xE2\x94\x82 " ANSI_RESET
-#define STRIP_CLOSE      "\r" ANSI_DIM ANSI_CYAN "\xE2\x94\x94" ANSI_RESET
-#define STRIP_CLOSE_SOLO "\r" ANSI_DIM ANSI_CYAN ">" ANSI_RESET
+#define STRIP_FIRST ANSI_DIM ANSI_CYAN "┃ " ANSI_RESET
+#define STRIP_BODY  ANSI_DIM ANSI_CYAN "┃ " ANSI_RESET
 
 static char capture_buf[131072];
 
@@ -80,8 +78,7 @@ static void test_head_only_under_cap_shows_all_lines(void)
     EXPECT(strstr(out, "hello") != NULL);
     EXPECT(strstr(out, "world") != NULL);
     EXPECT(strstr(out, STRIP_FIRST) != NULL);
-    EXPECT(strstr(out, STRIP_CLOSE) != NULL);
-    EXPECT(strstr(out, STRIP_BODY ANSI_DIM "world" ANSI_RESET STRIP_CLOSE) != NULL);
+    EXPECT(strstr(out, STRIP_BODY ANSI_DIM "world" ANSI_RESET) != NULL);
 }
 
 static void test_single_line_uses_solo_close(void)
@@ -89,7 +86,7 @@ static void test_single_line_uses_solo_close(void)
     const char *in = "only\n";
     const char *out = render_one(TOOL_RENDER_HEAD, in, strlen(in));
     EXPECT(strstr(out, "only") != NULL);
-    EXPECT(strstr(out, STRIP_FIRST ANSI_DIM "only" ANSI_RESET STRIP_CLOSE_SOLO) != NULL);
+    EXPECT(strstr(out, STRIP_FIRST ANSI_DIM "only" ANSI_RESET) != NULL);
 }
 
 static void test_partial_trailing_line_committed(void)
@@ -103,7 +100,7 @@ static void test_partial_trailing_line_committed(void)
     tool_render_free(&r);
     const char *out = capture_read();
     EXPECT(strstr(out, "no newline") != NULL);
-    EXPECT(strstr(out, STRIP_FIRST ANSI_DIM "no newline" ANSI_RESET STRIP_CLOSE_SOLO) != NULL);
+    EXPECT(strstr(out, STRIP_FIRST ANSI_DIM "no newline" ANSI_RESET) != NULL);
     EXPECT(d.pending_newlines == 1);
 }
 
@@ -143,7 +140,7 @@ static void test_blank_lines_elided_between_content(void)
     const char *in = "a\n\n\nb\n";
     const char *out = render_one(TOOL_RENDER_HEAD, in, strlen(in));
     EXPECT(strstr(out, STRIP_FIRST ANSI_DIM "a") != NULL);
-    EXPECT(strstr(out, STRIP_BODY ANSI_DIM "b" ANSI_RESET STRIP_CLOSE) != NULL);
+    EXPECT(strstr(out, STRIP_BODY ANSI_DIM "b" ANSI_RESET) != NULL);
 }
 
 static void test_whitespace_only_lines_elided(void)
@@ -151,14 +148,14 @@ static void test_whitespace_only_lines_elided(void)
     const char *in = "hello\n  \n\t\nworld\n";
     const char *out = render_one(TOOL_RENDER_HEAD, in, strlen(in));
     EXPECT(strstr(out, STRIP_FIRST ANSI_DIM "hello") != NULL);
-    EXPECT(strstr(out, STRIP_BODY ANSI_DIM "world" ANSI_RESET STRIP_CLOSE) != NULL);
+    EXPECT(strstr(out, STRIP_BODY ANSI_DIM "world" ANSI_RESET) != NULL);
 }
 
 static void test_indented_content_preserved(void)
 {
     const char *in = "    indented\n";
     const char *out = render_one(TOOL_RENDER_HEAD, in, strlen(in));
-    EXPECT(strstr(out, STRIP_FIRST ANSI_DIM "    indented" ANSI_RESET STRIP_CLOSE_SOLO) != NULL);
+    EXPECT(strstr(out, STRIP_FIRST ANSI_DIM "    indented" ANSI_RESET) != NULL);
 }
 
 static void test_tab_expanded_to_four_spaces(void)
@@ -179,7 +176,7 @@ static void test_head_only_exceeds_cap_emits_footer(void)
     EXPECT(strstr(out, "line000") != NULL);
     EXPECT(strstr(out, "line001") != NULL);
     EXPECT(strstr(out, "more line") != NULL);
-    EXPECT(strstr(out, STRIP_CLOSE) != NULL);
+    EXPECT(strstr(out, ANSI_DIM ANSI_CYAN "┇ " ANSI_RESET ANSI_DIM) != NULL);
 }
 
 static void test_head_tail_under_cap_shows_all_lines(void)
@@ -187,7 +184,7 @@ static void test_head_tail_under_cap_shows_all_lines(void)
     const char *in = "a\nb\n";
     const char *out = render_one(TOOL_RENDER_HEAD_TAIL, in, strlen(in));
     EXPECT(strstr(out, STRIP_FIRST ANSI_DIM "a") != NULL);
-    EXPECT(strstr(out, STRIP_BODY ANSI_DIM "b" ANSI_RESET STRIP_CLOSE) != NULL);
+    EXPECT(strstr(out, STRIP_BODY ANSI_DIM "b" ANSI_RESET) != NULL);
 }
 
 static void test_head_tail_exceeds_cap_emits_marker_and_tail(void)
@@ -200,8 +197,8 @@ static void test_head_tail_exceeds_cap_emits_marker_and_tail(void)
     EXPECT(strstr(out, "row000") != NULL);
     EXPECT(strstr(out, "row199") != NULL);
     EXPECT(strstr(out, "more line") != NULL);
+    EXPECT(strstr(out, ANSI_DIM ANSI_CYAN "┇ " ANSI_RESET ANSI_DIM) != NULL);
     EXPECT(strstr(out, " ...") != NULL);
-    EXPECT(strstr(out, STRIP_CLOSE) != NULL);
 }
 
 static void test_head_tail_modest_overflow_replays_inline(void)
@@ -214,8 +211,7 @@ static void test_head_tail_modest_overflow_replays_inline(void)
     EXPECT(strstr(out, "d") != NULL);
     EXPECT(strstr(out, "e") != NULL);
     EXPECT(strstr(out, "more line") == NULL);
-    EXPECT(strstr(out, STRIP_CLOSE) != NULL);
-    EXPECT(strstr(out, STRIP_BODY ANSI_DIM "e" ANSI_RESET STRIP_CLOSE) != NULL);
+    EXPECT(strstr(out, STRIP_BODY ANSI_DIM "e" ANSI_RESET) != NULL);
 }
 
 static void test_long_line_truncated_with_ellipsis(void)
@@ -227,7 +223,6 @@ static void test_long_line_truncated_with_ellipsis(void)
     const char *out = render_one(TOOL_RENDER_HEAD, in, 212);
     EXPECT(strstr(out, "...") != NULL);
     EXPECT(strstr(out, "TAIL_MARKER") == NULL);
-    EXPECT(strstr(out, STRIP_CLOSE_SOLO) != NULL);
 }
 
 static void test_over_indented_content_renders_truncation_marker(void)
@@ -238,7 +233,6 @@ static void test_over_indented_content_renders_truncation_marker(void)
     in[201] = '\n';
     const char *out = render_one(TOOL_RENDER_HEAD, in, 202);
     EXPECT(strstr(out, "...") != NULL);
-    EXPECT(strstr(out, STRIP_CLOSE_SOLO) != NULL);
 }
 
 static void test_long_unbroken_input_buffer_bounded(void)
@@ -361,7 +355,7 @@ static void test_ctrl_bytes_dropped_before_render(void)
 {
     const char in[] = "ab\x07\x1b[31mc\x1b[mdef\n";
     const char *out = render_one(TOOL_RENDER_HEAD, in, sizeof(in) - 1);
-    EXPECT(strstr(out, STRIP_FIRST ANSI_DIM "abcdef" ANSI_RESET STRIP_CLOSE_SOLO) != NULL);
+    EXPECT(strstr(out, STRIP_FIRST ANSI_DIM "abcdef" ANSI_RESET) != NULL);
 }
 
 static void test_emit_callback_sets_flag(void)
@@ -391,12 +385,10 @@ static void test_begin_live_without_output_leaves_no_rows(void)
     tool_render_init(&r, &d, NULL, TOOL_RENDER_HEAD_TAIL);
     tool_render_begin_live(&r);
     tool_render_finalize(&r);
+    EXPECT(r.rows_emitted == 0);
     tool_render_free(&r);
     const char *out = capture_read();
     EXPECT(strstr(out, STRIP_FIRST) == NULL);
-    EXPECT(strstr(out, STRIP_CLOSE) == NULL);
-    EXPECT(strstr(out, STRIP_CLOSE_SOLO) == NULL);
-    EXPECT(r.rows_emitted == 0);
 }
 
 static void test_begin_live_without_spinner_matches_plain_render(void)
@@ -408,12 +400,12 @@ static void test_begin_live_without_spinner_matches_plain_render(void)
     tool_render_begin_live(&r);
     tool_render_feed(&r, "first\nsecond\n", 13);
     tool_render_finalize(&r);
+    EXPECT(r.rows_emitted == 2);
     tool_render_free(&r);
     const char *out = capture_read();
     /* Without a spinner there is no placeholder row; the block matches a plain render. */
     EXPECT(strstr(out, STRIP_FIRST ANSI_DIM "first") != NULL);
-    EXPECT(strstr(out, STRIP_BODY ANSI_DIM "second" ANSI_RESET STRIP_CLOSE) != NULL);
-    EXPECT(r.rows_emitted == 2);
+    EXPECT(strstr(out, STRIP_BODY ANSI_DIM "second" ANSI_RESET) != NULL);
 }
 
 static void test_finalize_is_idempotent(void)

@@ -18,9 +18,9 @@ void progress_bar_print(double frac, int width)
 
     fputs(ANSI_DIM, stdout);
     for (int i = 0; i < filled; i++)
-        fputc('#', stdout);
+        fputs("\xE2\x96\x88", stdout); /* █ */
     for (int i = filled; i < width; i++)
-        fputc('.', stdout);
+        fputs("\xE2\x96\x91", stdout); /* ░ */
     /* Close DIM specifically (SGR 22) instead of ANSI_RESET so any
      * caller-level attributes (e.g. an outer color span around a row
      * that contains the bar) survive. */

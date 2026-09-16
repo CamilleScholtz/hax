@@ -9,6 +9,7 @@
 struct spinner;
 
 #define SPINNER_TOOL_VIEW_ROWS_MAX 8
+#define SPINNER_GLYPH_COLS         1
 
 /* Create a spinner with a copied initial label. NULL or an empty label selects "working...".
  * Returns NULL when stdout is not a terminal or the animation thread cannot start. */
@@ -35,8 +36,8 @@ struct spinner_row {
 
 /* Replace the tool-status view with up to SPINNER_TOOL_VIEW_ROWS_MAX copied prepared rows, newest
  * last; excess oldest rows are dropped. Rows are painted verbatim, with the animated glyph
- * overprinting the last row's first cell. Shows the view if it is hidden; content changes repaint
- * on the next animation frame, not synchronously. */
+ * overprinting the last row's first SPINNER_GLYPH_COLS cells. Shows the view if it is hidden;
+ * content changes repaint on the next animation frame, not synchronously. */
 void spinner_set_tool_status_view(struct spinner *spinner, const struct spinner_row *rows,
                                   int count);
 
@@ -67,8 +68,9 @@ void spinner_request_label(struct spinner *spinner, const char *key, const char 
  * counter with zero. The counter appears only for long waits and never on tool-status rows. */
 void spinner_set_timer(struct spinner *spinner, long started_at_ms);
 
-/* Return a borrowed, NUL-terminated one-cell UTF-8 glyph selected from monotonic time. */
-const char *spinner_glyph_now(void);
+/* Return a borrowed SPINNER_GLYPH_COLS-cell frame for monotonic milliseconds (negative means
+ * zero). Frames include SGR intensity controls and leave intensity normal after the glyph. */
+const char *spinner_glyph_at(long now_ms);
 
 /* Cell widths of the physical rows painted by one tool-view frame, for reflow-aware repaints. */
 struct spinner_tool_frame {
@@ -81,7 +83,7 @@ struct buf;
 /* Append one synchronized tool-view repaint frame: climb over the previous frame (NULL on first
  * paint), then overprint every row before erasing stale tails, so terminals without synchronized
  * output never show a blank frame. Rows are painted verbatim with the glyph overprinting the last
- * row's first cell; their widths are recorded in painted. Pure with respect to the terminal. */
+ * row's reserved gutter; their widths are recorded in painted. Does not access the terminal. */
 void spinner_build_tool_frame(struct buf *frame, const struct spinner_row *rows, int row_count,
                               const char *glyph, int terminal_cols,
                               const struct spinner_tool_frame *previous,

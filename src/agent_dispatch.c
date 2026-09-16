@@ -32,7 +32,7 @@ static const char *tool_name(const struct item *call)
 
 static int tool_tag_cells(const char *name)
 {
-    return (int)display_cells(name) + 3; /* "[name] " */
+    return (int)display_cells(name) + 3; /* "┃ name " */
 }
 
 enum tool_preview_mode tool_call_preview_mode(const struct item *call)
@@ -173,16 +173,29 @@ static void write_tool_header(struct disp *disp, const struct item *call)
 
     disp_block_separator(disp);
     disp_write_ansi(disp, theme_open(THEME_CHROME));
-    disp_printf(disp, "[%s]", name);
+    disp_printf(disp, "┃ %s", name);
     disp_write_ansi(disp, ANSI_RESET);
 
     if (text.argument) {
         int rows = !text.raw && tool->display.header_rows > 0 ? tool->display.header_rows : 1;
-        char *layout = header_text_layout(&text, first_row_cells, row_budget(terminal_width), rows);
+        char *layout = header_text_layout(
+            &text, first_row_cells, row_budget(terminal_width - TOOL_RENDER_GUTTER_COLS), rows);
         disp_putc(disp, ' ');
-        disp_write_ansi(disp, text.raw ? ANSI_DIM : ANSI_BOLD);
-        disp_write(disp, layout, strlen(layout));
-        disp_write_ansi(disp, ANSI_RESET);
+        const char *row = layout;
+        for (;;) {
+            const char *end = strchr(row, '\n');
+            disp_write_ansi(disp, text.raw ? ANSI_DIM : ANSI_BOLD);
+            disp_write(disp, row, end ? (size_t)(end - row) : strlen(row));
+            disp_write_ansi(disp, ANSI_RESET);
+            if (!end)
+                break;
+            disp_putc(disp, '\n');
+            disp_commit_newlines(disp);
+            disp_write_ansi(disp, theme_open(THEME_CHROME));
+            disp_write(disp, "┃ ", strlen("┃ "));
+            disp_write_ansi(disp, ANSI_RESET);
+            row = end + 1;
+        }
         free(layout);
         write_header_extra(disp, &text);
     }
@@ -204,7 +217,7 @@ static int write_collapsed_header(struct disp *disp, const struct item *call,
     char *layout = header_text_layout(text, row_cells, row_cells, 1);
 
     disp_write_ansi(disp, theme_open(THEME_CHROME_DIM));
-    disp_printf(disp, "[%s]", name);
+    disp_printf(disp, "┃ %s", name);
     /* The theme closer may clear intensity, so restore dim for the argument. */
     disp_write_ansi(disp, theme_close(THEME_CHROME_DIM));
     disp_write_ansi(disp, ANSI_DIM);
@@ -339,7 +352,7 @@ static struct item dispatch_tool_call_collapsed(struct render_ctx *render,
     /* Preserve the open line's cursor column for the next read. */
     char label[64];
     char request_key[32];
-    snprintf(label, sizeof(label), "[%s] running...", call->tool_name);
+    snprintf(label, sizeof(label), "%s running...", call->tool_name);
     snprintf(request_key, sizeof(request_key), "run:%s", call->tool_name);
     spinner_request_label(spinner, request_key, label);
     spinner_park(spinner, is_read ? render->cluster.line_cells : 0);

@@ -20,10 +20,8 @@
 
 #define TAIL_RING_CAPACITY 1500
 
-static const char GUTTER_FIRST[] = "\xE2\x94\x8C"; /* ┌ */
-static const char GUTTER_BODY[] = "\xE2\x94\x82";  /* │ */
-static const char GUTTER_LAST[] = "\xE2\x94\x94";  /* └ */
-static const char GUTTER_MARKER[] = ">";
+static const char GUTTER_BODY[] = "┃";
+static const char GUTTER_MARKER[] = "┇";
 
 struct preview_limits {
     int head_lines;
@@ -120,7 +118,7 @@ static void write_gutter(struct disp *disp, const char *glyph)
 
 void tool_render_write_marker_gutter(struct disp *disp)
 {
-    write_gutter(disp, GUTTER_MARKER);
+    write_gutter(disp, GUTTER_BODY);
 }
 
 /* The one definition of a preview row's look; settled rows and live spinner rows share it. */
@@ -131,22 +129,6 @@ static void compose_row(struct buf *out, const char *gutter_glyph, const char *c
     buf_append_str(out, " " ANSI_RESET ANSI_DIM);
     buf_append_str(out, content);
     buf_append_str(out, ANSI_RESET);
-}
-
-static void write_next_row_gutter(struct tool_render *render)
-{
-    write_gutter(render->disp, render->rows_emitted == 0 ? GUTTER_FIRST : GUTTER_BODY);
-}
-
-/* The final newline remains pending, so a carriage return can replace the row's first cell. */
-static void overprint_final_gutter(struct disp *disp, const char *glyph)
-{
-    FILE *sink = disp_sink(disp);
-    fputc('\r', sink);
-    fputs(theme_open(THEME_CHROME_DIM), sink);
-    fputs(glyph, sink);
-    fputs(ANSI_RESET, sink);
-    fflush(sink);
 }
 
 static char *truncate_slice(const char *bytes, size_t len)
@@ -164,9 +146,9 @@ static char *truncate_slice(const char *bytes, size_t len)
 static size_t live_row_budget(void)
 {
     int width = term_width();
-    if (width <= TOOL_RENDER_GUTTER_COLS + 5)
+    if (width <= (SPINNER_GLYPH_COLS + 1) + 5)
         return 1;
-    size_t terminal_budget = (size_t)(width - TOOL_RENDER_GUTTER_COLS - 1);
+    size_t terminal_budget = (size_t)(width - (SPINNER_GLYPH_COLS + 1) - 1);
     size_t display_budget = row_content_budget();
     return terminal_budget < display_budget ? terminal_budget : display_budget;
 }
@@ -182,9 +164,9 @@ static void paint_live_rows(struct tool_render *render, const char *const *conte
     for (int row = 0; row < count; row++) {
         char *clipped = truncate_for_display(contents[row], budget);
         buf_init(&styled[row]);
-        compose_row(&styled[row], GUTTER_BODY, clipped);
+        compose_row(&styled[row], " ", clipped);
         rows[row].bytes = styled[row].data;
-        rows[row].cells = TOOL_RENDER_GUTTER_COLS + (int)display_cells(clipped);
+        rows[row].cells = (SPINNER_GLYPH_COLS + 1) + (int)display_cells(clipped);
         free(clipped);
     }
 
@@ -212,12 +194,13 @@ void tool_render_begin_live(struct tool_render *render)
     render->status_placeholder = 1;
 }
 
-static void emit_row(struct tool_render *render, const char *content, size_t len)
+static void emit_row(struct tool_render *render, const char *gutter, const char *content,
+                     size_t len)
 {
     char *truncated = truncate_slice(content, len);
     struct buf row;
     buf_init(&row);
-    compose_row(&row, render->rows_emitted == 0 ? GUTTER_FIRST : GUTTER_BODY, truncated);
+    compose_row(&row, gutter, truncated);
     free(truncated);
     disp_commit_newlines(render->disp);
     disp_write(render->disp, row.data, row.len);
@@ -234,7 +217,7 @@ static void commit_status(struct tool_render *render)
     if (!render->status_visible)
         return;
     spinner_swap_begin(render->spinner);
-    emit_row(render, render->status_line.data ? render->status_line.data : "",
+    emit_row(render, GUTTER_BODY, render->status_line.data ? render->status_line.data : "",
              render->status_line.len);
     spinner_swap_end(render->spinner);
     disp_flush(render->disp);
@@ -248,7 +231,7 @@ static void commit_status(struct tool_render *render)
 static void replace_status_with_marker(struct tool_render *render, const char *marker)
 {
     spinner_swap_begin(render->spinner);
-    emit_row(render, marker, strlen(marker));
+    emit_row(render, GUTTER_MARKER, marker, strlen(marker));
     disp_flush(render->disp);
     render->status_visible = 0;
 }
@@ -366,7 +349,7 @@ static void emit_diff_line(struct tool_render *render, const char *line, size_t 
         render->status_visible = 0;
         render->status_placeholder = 0;
     }
-    write_next_row_gutter(render);
+    write_gutter(render->disp, GUTTER_BODY);
     disp_write_ansi(render->disp, diff_line_color(line, len, render->diff_hunk_started));
     char *truncated = truncate_slice(line, len);
     disp_write(render->disp, truncated, strlen(truncated));
@@ -622,7 +605,7 @@ static void finalize_head_tail(struct tool_render *render)
     else
         drop_status(render);
     for (int row = 0; row < preview.row_count; row++)
-        emit_row(render, preview.rows[row], strlen(preview.rows[row]));
+        emit_row(render, GUTTER_BODY, preview.rows[row], strlen(preview.rows[row]));
     tail_preview_free(&preview);
 }
 
@@ -671,16 +654,12 @@ void tool_render_finalize(struct tool_render *render)
     }
 
     /* The swap begins atomically with the spinner's erase; its bracket closes only after the
-     * settled rows and the gutter overprint. */
+     * settled rows. */
     if (render->mode == TOOL_RENDER_DIFF)
         spinner_swap_begin(render->spinner);
     else
         finalize_capped_preview(render);
 
-    if (render->rows_emitted >= 2)
-        overprint_final_gutter(render->disp, GUTTER_LAST);
-    else if (render->rows_emitted == 1)
-        overprint_final_gutter(render->disp, GUTTER_MARKER);
     spinner_swap_end(render->spinner);
     disp_flush(render->disp);
     render->block_open = 0;

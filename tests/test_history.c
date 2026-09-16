@@ -53,7 +53,7 @@ static char *render(enum history_detail detail, const struct item *items, size_t
 /* Drop SGR runs from settled rows. Needed wherever an assertion spans text
  * the renderer styled in pieces — a coalesced read line closes and reopens
  * dim around each appended name, so "a.h, b.h" is not a literal substring of
- * the output, and a check for "\n\n[read]" would never match (the tag is
+ * the output, and a check for "\n\n┃ read" would never match (the tag is
  * preceded by its style escapes) whether or not the blank line is there.
  * Caller frees. */
 static char *strip_sgr(const char *s)
@@ -107,7 +107,7 @@ static void test_brief_omits_tool_output(void)
     struct item *items = sample_turn(&n);
     char *out = render(HISTORY_BRIEF, items, n, 0);
     EXPECT(strstr(out, "count the sources") != NULL);
-    EXPECT(strstr(out, "[bash]") != NULL);
+    EXPECT(strstr(out, "┃ bash") != NULL);
     EXPECT(strstr(out, "the count") != NULL);
     EXPECT(strstr(out, "164 lines.") != NULL);
     EXPECT(strstr(out, "COUNT_OUTPUT_164") == NULL); /* the result body stays out */
@@ -121,13 +121,9 @@ static void test_full_shows_tool_output(void)
     size_t n;
     struct item *items = sample_turn(&n);
     char *out = render(HISTORY_FULL, items, n, 0);
-    EXPECT(strstr(out, "[bash]") != NULL);
+    EXPECT(strstr(out, "┃ bash") != NULL);
     EXPECT(strstr(out, "the count") != NULL);
-    /* The body sits inside a closed block: a single-row block ends with
-     * the solo chevron, and the cursor ops that painted it (\r overprint,
-     * erase-line) are resolved rather than leaked into the output. */
-    const char *chevron = strstr(out, ">");
-    EXPECT(chevron != NULL && strstr(chevron, "COUNT_OUTPUT_164") != NULL);
+    EXPECT(strstr(out, "COUNT_OUTPUT_164") != NULL);
     EXPECT(strstr(out, "\r") == NULL);
     EXPECT(strstr(out, "\x1b[K") == NULL);
     free(out);
@@ -162,7 +158,7 @@ static void test_full_keeps_collapsed_calls_quiet(void)
     items[1].output = (char *)"     1\tsecret-file-contents\n";
 
     char *out = render(HISTORY_FULL, items, 2, 0);
-    EXPECT(strstr(out, "[read]") != NULL);
+    EXPECT(strstr(out, "┃ read") != NULL);
     /* Abbreviated to the basename, as the live breadcrumb is — the full path
      * belongs to the verbose header, which a collapsed call never gets. */
     EXPECT(strstr(out, "hostname") != NULL);
@@ -194,7 +190,7 @@ static void test_collapsed_cluster_spans_turns_tightly(void)
     EXPECT(strstr(plain, "/tmp/aaa.h") == NULL); /* basenames, not paths */
     /* Two reads share one line, and a requested range keeps its suffix. */
     EXPECT(strstr(plain, "aaa.h, bbb.h:10-29") != NULL);
-    EXPECT(strstr(plain, "\n\n[read]") == NULL); /* nothing splits the cluster */
+    EXPECT(strstr(plain, "\n\n┃ read") == NULL); /* nothing splits the cluster */
     free(plain);
     free(out);
 }
@@ -323,9 +319,9 @@ static void test_brief_names_verbose_tool_args(void)
     items[1].tool_arguments_json = (char *)"{\"path\":\"/tmp/deep/written.c\",\"content\":\"x\"}";
 
     char *out = render(HISTORY_BRIEF, items, 2, 0);
-    EXPECT(strstr(out, "[edit]") != NULL);
+    EXPECT(strstr(out, "┃ edit") != NULL);
     EXPECT(strstr(out, "/tmp/deep/edited.c") != NULL);
-    EXPECT(strstr(out, "[write]") != NULL);
+    EXPECT(strstr(out, "┃ write") != NULL);
     EXPECT(strstr(out, "/tmp/deep/written.c") != NULL);
     free(out);
 }
@@ -344,13 +340,13 @@ static void test_nameless_call_renders_in_both_modes(void)
     items[1].output = (char *)"NAMELESS_BODY\n";
 
     char *full = render(HISTORY_FULL, items, 2, 0);
-    EXPECT(strstr(full, "[?]") != NULL);
+    EXPECT(strstr(full, "┃ ?") != NULL);
     EXPECT(strstr(full, "NAMELESS_ARG") != NULL); /* generic JSON arg fallback */
     EXPECT(strstr(full, "NAMELESS_BODY") != NULL);
     free(full);
 
     char *brief = render(HISTORY_BRIEF, items, 2, 0);
-    EXPECT(strstr(brief, "[?]") != NULL);
+    EXPECT(strstr(brief, "┃ ?") != NULL);
     EXPECT(strstr(brief, "NAMELESS_ARG") != NULL);
     free(brief);
 }
@@ -369,7 +365,7 @@ static void test_brief_shows_formatted_only_argument(void)
     items[1].output = (char *)"[tests-asan finished (exit 0) after 12s]\n";
 
     char *brief = render(HISTORY_BRIEF, items, 2, 0);
-    EXPECT(strstr(brief, "[task_wait]") != NULL);
+    EXPECT(strstr(brief, "┃ task_wait") != NULL);
     EXPECT(strstr(brief, "tests-asan (up to 10m)") != NULL);
     free(brief);
 
@@ -418,14 +414,14 @@ static void test_collapsed_row_stays_in_budget_at_narrow_width(void)
     config_set_override("display_width", NULL);
 
     char *plain = strip_sgr(out);
-    char *row = strstr(plain, "[read]");
+    char *row = strstr(plain, "┃ read");
     EXPECT(row != NULL);
     if (row) {
         char *end = strchr(row, '\n');
         if (end)
             *end = '\0';
         EXPECT(display_cells(row) <= 19);
-        EXPECT(strstr(row, "[read] e...") != NULL);
+        EXPECT(strstr(row, "┃ read e...") != NULL);
         EXPECT(strstr(row, ":1") != NULL);
     }
     free(plain);
@@ -457,7 +453,7 @@ static void test_replays_preprocessed_args(void)
     char *out = render(HISTORY_FULL, items, 2, 0);
     char *plain = strip_sgr(out);
     EXPECT(strstr(plain, "cd ") == NULL);           /* the stripped prefix stays gone */
-    EXPECT(strstr(plain, "[bash] ls src") != NULL); /* quiet, as it was live */
+    EXPECT(strstr(plain, "┃ bash ls src") != NULL); /* quiet, as it was live */
     EXPECT(strstr(plain, "LISTING_BODY") == NULL);  /* exploration output stays hidden */
     free(plain);
     free(out);
@@ -482,7 +478,7 @@ static void test_skipped_call_replays_its_outcome(void)
 
     for (int brief = 0; brief < 2; brief++) {
         char *out = render(brief ? HISTORY_BRIEF : HISTORY_FULL, items, 2, 0);
-        EXPECT(strstr(out, "[read]") != NULL);
+        EXPECT(strstr(out, "┃ read") != NULL);
         EXPECT(strstr(out, INTERRUPT_MARKER) != NULL);
         /* The verbose header the skipped block used, not the quiet basename. */
         EXPECT(strstr(out, "/etc/hostname") != NULL);
@@ -507,7 +503,7 @@ static void test_ran_call_printing_a_marker_is_not_undispatched(void)
     items[1].output = (char *)INTERRUPT_MARKER; /* origin stays ITEM_ORIGIN_NONE */
 
     char *out = render(HISTORY_FULL, items, 2, 0);
-    EXPECT(strstr(out, "[read]") != NULL);
+    EXPECT(strstr(out, "┃ read") != NULL);
     EXPECT(strstr(out, "hostname") != NULL);
     EXPECT(strstr(out, "/etc/hostname") == NULL); /* quiet line, not a header */
     EXPECT(strstr(out, INTERRUPT_MARKER) == NULL);

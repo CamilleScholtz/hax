@@ -33,12 +33,12 @@ int main(void)
         return 1;
     }
     free(path);
-    expect_bar(0, 4, ANSI_DIM "...." ANSI_BOLD_OFF);
-    expect_bar(0.5, 4, ANSI_DIM "##.." ANSI_BOLD_OFF);
-    expect_bar(0.625, 4, ANSI_DIM "###." ANSI_BOLD_OFF);
-    expect_bar(1, 4, ANSI_DIM "####" ANSI_BOLD_OFF);
-    expect_bar(-1, 4, ANSI_DIM "...." ANSI_BOLD_OFF);
-    expect_bar(2, 4, ANSI_DIM "####" ANSI_BOLD_OFF);
-    expect_bar(0, 0, ANSI_DIM "." ANSI_BOLD_OFF);
+    expect_bar(0, 4, ANSI_DIM "░░░░" ANSI_BOLD_OFF);
+    expect_bar(0.5, 4, ANSI_DIM "██░░" ANSI_BOLD_OFF);
+    expect_bar(0.625, 4, ANSI_DIM "███░" ANSI_BOLD_OFF);
+    expect_bar(1, 4, ANSI_DIM "████" ANSI_BOLD_OFF);
+    expect_bar(-1, 4, ANSI_DIM "░░░░" ANSI_BOLD_OFF);
+    expect_bar(2, 4, ANSI_DIM "████" ANSI_BOLD_OFF);
+    expect_bar(0, 0, ANSI_DIM "░" ANSI_BOLD_OFF);
     T_REPORT();
 }

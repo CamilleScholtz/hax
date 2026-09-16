@@ -19,7 +19,7 @@
 
 static const char *banner_bar(char *buffer, size_t size)
 {
-    snprintf(buffer, size, "%s|%s", theme_open(THEME_CHROME), theme_close(THEME_CHROME));
+    snprintf(buffer, size, "%s┃%s", theme_open(THEME_CHROME), theme_close(THEME_CHROME));
     return buffer;
 }
 
@@ -106,11 +106,11 @@ void banner_identity(FILE *out, const struct provider *provider,
         free(stance);
     }
     if (!provider) {
-        banner_put(&w, " ", ANSI_DIM, ANSI_BOLD_OFF, "> no provider — use /provider");
+        banner_put(&w, " ", ANSI_DIM, ANSI_BOLD_OFF, "┃ no provider — use /provider");
         banner_close(&w);
         return;
     }
-    char *head = xasprintf("> %s", provider->name ? provider->name : "?");
+    char *head = xasprintf("┃ %s", provider->name ? provider->name : "?");
     banner_put(&w, " ", ANSI_DIM, ANSI_BOLD_OFF, head);
     free(head);
     const char *model_label = session->model_label ? session->model_label : session->model;

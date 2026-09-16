@@ -16,12 +16,12 @@ notes (see [docs/releasing.md](docs/releasing.md)).
 
 - Downstream: Up/Down move through displayed prompt rows before recalling history at the
   first/last row. Ctrl-P/Ctrl-N still recall history directly.
-- Downstream: the interactive prompt uses ASCII `>` instead of `❯`.
-- Downstream: the shared spinner uses ASCII frames (`| / - \`).
-- Downstream: banner and submitted-prompt gutters use `|` instead of `▌`.
-- Downstream: banner and tool markers use `>` instead of `›`.
+- Downstream: prompts, banner gutters and markers, tool output, and picker selections use `┃`
+  sidebars. Tool headers use `┃ bash` instead of `[bash]`, with `┃` on wrapped continuation
+  rows too; omitted tool output uses `┇`. Editable input repeats its sidebar on every displayed
+  row, including wrapped and blank lines.
+- Downstream: the shared spinner is a single `•` that pulses in brightness without moving.
 - Downstream: rendered bullets use `-` instead of `•`.
-- Downstream: progress bars use `#` for fill and `.` for the empty track instead of `█`/`░`.
 
 - Custom providers no longer take their models.dev catalog identity from their own name; set
   `catalog_id` explicitly (for example `"catalog_id": "groq"`) to keep pricing and context

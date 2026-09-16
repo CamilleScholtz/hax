@@ -308,6 +308,8 @@ static void buf_append_csi(struct buf *out, int value, char final)
 struct paint_context {
     struct buf *frame;
     int first_row;
+    const char *prompt;
+    int prompt_width;
 };
 
 static void paint_emit(const struct input_render_event *event, void *user)
@@ -320,8 +322,29 @@ static void paint_emit(const struct input_render_event *event, void *user)
     }
     if (event->row > context->first_row)
         buf_append_str(context->frame, ANSI_ERASE_LINE "\r\n");
-    for (int column = 0; column < event->col; column++)
+    int column = 0;
+    if (context->prompt_width > 0 && event->col >= context->prompt_width) {
+        buf_append_str(context->frame, context->prompt);
+        column = context->prompt_width;
+    }
+    for (; column < event->col; column++)
         buf_append(context->frame, " ", 1);
+}
+
+void input_render_edit_rows(struct buf *frame, const struct input *in, int first_row, int last_row)
+{
+    int prompt_width = input_core_prompt_width(in->prompt);
+    int continuation_column = in->continuation_at_column_zero ? 0 : prompt_width;
+    if (first_row == 0)
+        buf_append_str(frame, in->prompt);
+    struct paint_context context = {
+        .frame = frame,
+        .first_row = first_row,
+        .prompt = in->prompt,
+        .prompt_width = prompt_width,
+    };
+    input_core_render_window(in->buf, in->len, in->cursor, prompt_width, continuation_column,
+                             in->display_columns, first_row, last_row, paint_emit, &context, NULL);
 }
 
 /* Omit an indicator that would wrap because paint accounts for it as one row. Return
@@ -394,18 +417,7 @@ static void paint(struct input *in)
         top_indicator_width = append_clip_indicator(&frame, first_row, in->display_columns);
         buf_append_str(&frame, "\r\n");
     }
-    if (first_row == 0)
-        buf_append_str(&frame, in->prompt);
-
-    struct paint_context context = {.frame = &frame, .first_row = first_row};
-    if (clipped) {
-        input_core_render_window(in->buf, in->len, in->cursor, prompt_width, continuation_column,
-                                 in->display_columns, first_row, first_row + visible_rows - 1,
-                                 paint_emit, &context, NULL);
-    } else {
-        input_core_render(in->buf, in->len, in->cursor, prompt_width, continuation_column,
-                          in->display_columns, paint_emit, &context, NULL);
-    }
+    input_render_edit_rows(&frame, in, first_row, first_row + visible_rows - 1);
 
     /* Ghost text after the empty prompt; the cursor repositioning below lands on top of it. */
     in->hint_painted = 0;
@@ -557,7 +569,7 @@ static void submitted_emit(const struct input_render_event *event, void *user)
         buf_append_str(frame, theme_close(THEME_ACCENT));
         buf_append_str(frame, ANSI_ERASE_LINE "\r\n");
         buf_append_str(frame, theme_open(THEME_ACCENT));
-        buf_append_str(frame, "| ");
+        buf_append_str(frame, "┃ ");
     }
 }
 
@@ -567,7 +579,7 @@ static void append_user_message(struct buf *frame, const char *text, size_t len,
     const int body_column = 2;
 
     buf_append_str(frame, theme_open(THEME_ACCENT));
-    buf_append_str(frame, "| ");
+    buf_append_str(frame, "┃ ");
     input_core_render(text, len, 0, body_column, body_column, display_columns, submitted_emit,
                       frame, NULL);
     buf_append_str(frame, theme_close(THEME_ACCENT));

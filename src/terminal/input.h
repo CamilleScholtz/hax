@@ -77,6 +77,12 @@ void input_history_open_default(struct input *in, int persist);
  * `display_columns`. Leave the cursor at column 0 of a fresh row without erasing prior content. */
 void input_render_user_message_to(FILE *out, const char *text, size_t len, int display_columns);
 
+struct buf;
+
+/* Append the inclusive visible row range of the editable buffer, including prompt gutters and
+ * CRLF row breaks. Does not move the cursor or access the terminal. */
+void input_render_edit_rows(struct buf *frame, const struct input *in, int first_row, int last_row);
+
 /* Return display_width() clamped to the current terminal width. */
 int input_display_cols(void);
 
