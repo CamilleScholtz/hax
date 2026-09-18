@@ -11,9 +11,16 @@ notes (see [docs/releasing.md](docs/releasing.md)).
 
 - A preset name right after `hax` starts with that preset: `hax review` is short for
   `hax --preset review`, and `hax review -p "..."` works the same way in one-shot mode.
+- `/session` shows a token row per model when the conversation switched models, how many user
+  turns `/undo` removed, and what a fork inherited from its source.
 
 ### Changed
 
+- Resuming a session restores its `/session` totals and shows the last user turn's stats line,
+  so a conversation looks the same wherever it is picked up. Totals now cover everything the
+  session spent on, including undone user turns and retried requests.
+- Session files are append-only: `/undo` records the cut instead of truncating the file. Scripts
+  reading session files should see [docs/sessions.md](docs/sessions.md) for the new records.
 - Prompt and tool guidance favor native tools for ordinary file operations, and backgrounding when
   there is useful work to overlap rather than an immediate wait.
 - Custom providers no longer take their models.dev catalog identity from their own name; set
