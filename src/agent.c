@@ -1307,15 +1307,13 @@ int agent_run(struct provider **provider_io, const struct hax_opts *options)
         /* Clear stale editor interrupts before arming first-Esc pause and second-Esc abort. */
         interrupt_clear_requests();
         interrupt_arm();
-        /* A positive max_turns pauses at a clean seam; auto (and 0) means unlimited here. */
-        int max_turns = config_int("max_turns");
         struct repl_loop_ctx loop_ctx = {.state = &state};
         struct agent_loop_params loop_params = {
             .session = &session,
             .provider = current_provider,
             .tlog = state.transcript,
             .slog = state.session_log,
-            .max_turns = max_turns > 0 ? max_turns : -1,
+            .max_turns = config_int("max_turns"),
             .continued = continued,
             .hooks =
                 {

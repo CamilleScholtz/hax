@@ -16,6 +16,9 @@ notes (see [docs/releasing.md](docs/releasing.md)).
 
 ### Changed
 
+- One-shot runs no longer stop after 100 model round-trips: `max_turns` defaults to `0`
+  (unlimited) in both modes, and `auto` is no longer accepted. Set a number to keep a limit;
+  signals and `--json` remain the way to observe and stop a long run.
 - Resuming a session restores its `/session` totals and shows the last user turn's stats line,
   so a conversation looks the same wherever it is picked up. Totals now cover everything the
   session spent on, including undone user turns and retried requests.

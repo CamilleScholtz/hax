@@ -278,7 +278,7 @@ static void loop_run_active(const struct agent_loop_params *params,
     result->outcome = AGENT_LOOP_MAX_TURNS;
     result->last_context_tokens = -1;
 
-    for (int turn_n = 0; params->max_turns < 0 || turn_n < params->max_turns; turn_n++) {
+    for (int turn_n = 0; params->max_turns <= 0 || turn_n < params->max_turns; turn_n++) {
         /* The first boundary arrived with the user message — except on a continued run, whose
          * first turn extends the previous seam. Follow-up turns owe their own. Either way it is
          * appended lazily — just before this turn's items land in history — so a turn that

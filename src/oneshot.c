@@ -26,18 +26,8 @@
 #include "terminal/interrupt.h"
 #include "tools/bash_process.h"
 
-/* Bounds unattended agent loops that no supervisor interrupts; this is what max_turns "auto"
- * means in one-shot, and a positive value replaces it. */
-#define ONESHOT_DEFAULT_MAX_TURNS 100
-
 /* 128 + SIGINT, the shell convention for an interrupted command. */
 #define ONESHOT_EXIT_INTERRUPTED 130
-
-static int resolve_max_turns(void)
-{
-    int max_turns = config_int("max_turns");
-    return max_turns > 0 ? max_turns : ONESHOT_DEFAULT_MAX_TURNS;
-}
 
 struct oneshot_state {
     struct provider *provider;
@@ -592,7 +582,7 @@ static int finish_run(struct oneshot_state *state, const struct agent_loop_resul
 
 int oneshot_run(struct provider *provider, const char *prompt, const struct hax_opts *options)
 {
-    int max_turns = resolve_max_turns();
+    int max_turns = config_int("max_turns");
     struct oneshot_state state = {
         .provider = provider,
         .context_tokens = -1,

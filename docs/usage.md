@@ -66,7 +66,8 @@ hax --json "fix the failing test" | jq 'select(.kind == "tool_call" or .type == 
 
 A picker needs a terminal, so use `--resume=ID` rather than bare `--resume` with `-p`. `--raw` and
 `--bare` still record the conversation; combine either with `--no-session` for a disposable run.
-`max_turns` bounds a one-shot run's provider round-trips (default 100).
+A one-shot run is unlimited by default; set `max_turns` to abort after that many provider
+round-trips.
 
 A one-shot run responds to signals the way the REPL responds to Esc: SIGUSR1 pauses cleanly at
 the next turn boundary (outcome `paused`), and SIGINT (Ctrl-C) or SIGTERM interrupts at once,

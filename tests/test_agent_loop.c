@@ -648,7 +648,8 @@ static void test_loop_runs_tool_chain(void)
     chain_turn = 0;
     chain_two_tools = 0;
 
-    struct agent_loop_result result = run_chain(&session, &provider, &ctx, 4);
+    /* max_turns 0 is unlimited, not a zero-turn cap. */
+    struct agent_loop_result result = run_chain(&session, &provider, &ctx, 0);
     /* One tool turn must continue into one text-only turn, with frontend
      * begin and accounting hooks firing once per turn; context reflects the
      * latest turn rather than a sum. */
