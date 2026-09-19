@@ -39,6 +39,8 @@ notes (see [docs/releasing.md](docs/releasing.md)).
 
 ### Fixed
 
+- Theme colors are more readable and consistent, including quiet roles in the `light` theme and
+  the `rose` tint in the `dark` theme.
 - `config.json` and `state.json` are now written with a trailing newline, matching `auth.json`
   and session files.
 - The brief history shown on resume now names the task a `task_wait` call waited on, as the
