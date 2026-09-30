@@ -19,6 +19,8 @@ notes (see [docs/releasing.md](docs/releasing.md)).
 
 ### Changed
 
+- Downstream: the default prompt no longer requires running builds, tests, or linters before
+  reporting done.
 - Downstream: the ANSI theme uses yellow (its closest standard color to orange) for input,
   prompts, and picker selections instead of bright magenta.
 

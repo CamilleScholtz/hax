@@ -46,7 +46,6 @@ static const char DEFAULT_SYSTEM_PROMPT[] =
     "- Don't introduce new abstractions, helpers, or compatibility shims unless the task genuinely "
     "needs them.\n"
     "- Add a comment only when the *why* is non-obvious.\n"
-    "- If the project has a build, tests, or linter, run them before reporting done.\n"
     "\n"
     "Git: never commit, push, amend, branch, or run destructive commands (`reset --hard`, "
     "`checkout --`, `branch -D`) unless the user explicitly asks. Never revert changes you didn't "

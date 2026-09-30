@@ -211,8 +211,11 @@ static void test_build_system_prompt_default_no_suffix(void)
 
     char *out = build_test_system_prompt(0);
     EXPECT(out != NULL);
-    if (out)
+    if (out) {
         EXPECT(strncmp(out, "You are hax", 11) == 0);
+        EXPECT(strstr(out, "If the project has a build, tests, or linter, run them before "
+                           "reporting done.") == NULL);
+    }
     free(out);
 
     unsetenv("HAX_NO_ENV");

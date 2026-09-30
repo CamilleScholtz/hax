@@ -10,6 +10,8 @@ that may not fit upstream. Upstream acceptance is not a requirement for local fe
 
 ## Intended differences
 
+- The default prompt omits the blanket requirement to run builds, tests, or linters before
+  reporting done.
 - The ANSI theme uses yellow, the closest standard ANSI color to orange, for the user accent.
 
 - Up/Down move within the prompt's displayed rows, including soft wraps. Only Up on the first
