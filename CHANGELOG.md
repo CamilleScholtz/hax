@@ -9,6 +9,9 @@ notes (see [docs/releasing.md](docs/releasing.md)).
 
 ### Added
 
+- Shell-like Tab completion of `/` commands, with a dim placeholder for a command's arguments.
+- The built-in pickers take fzf's keys: Ctrl-J/Ctrl-K move the selection, and Ctrl-W and
+  Alt-Backspace delete a word of the query.
 - A preset name right after `hax` starts with that preset: `hax review` is short for
   `hax --preset review`, and `hax review -p "..."` works the same way in one-shot mode.
 - `/session` shows a token row per model when the conversation switched models, how many user
@@ -28,6 +31,10 @@ notes (see [docs/releasing.md](docs/releasing.md)).
 - Downstream: the shared spinner is a single `•` that pulses in brightness without moving.
 - Downstream: rendered bullets use `-` instead of `•`.
 
+- Prompt history (Up, Ctrl-R) is scoped to the working directory like sessions: each directory
+  keeps its own `history` file beside its session files, so a prompt typed in one project no
+  longer comes back in another. The old global `~/.local/state/hax/history` is no longer read and
+  can be deleted.
 - One-shot runs no longer stop after 100 model round-trips: `max_turns` defaults to `0`
   (unlimited) in both modes, and `auto` is no longer accepted. Set a number to keep a limit;
   signals and `--json` remain the way to observe and stop a long run.
@@ -61,6 +68,8 @@ notes (see [docs/releasing.md](docs/releasing.md)).
 - Background task completion notes say whether output is pending or there is nothing to
   collect, and `task_wait` on an already collected task reports its final status instead of
   `no such task`.
+- Skill descriptions written as YAML block scalars (`>`, `|`) or wrapped across lines are now
+  read in full, instead of being dropped or cut off at the first line.
 
 ## [0.5.0] - 2026-09-04
 
