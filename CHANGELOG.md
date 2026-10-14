@@ -7,6 +7,12 @@ notes (see [docs/releasing.md](docs/releasing.md)).
 
 ## [Unreleased]
 
+### Fixed
+
+- OpenAI and Codex models no longer have to fill in every optional tool parameter. GPT-6 models
+  could hang or run unrequested commands, and had to set a bash timeout on every call, often far
+  above the two-minute default after which long commands move to the background.
+
 ## [0.6.0] - 2026-10-09
 
 ### Added
