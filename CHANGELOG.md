@@ -7,6 +7,11 @@ notes (see [docs/releasing.md](docs/releasing.md)).
 
 ## [Unreleased]
 
+### Added
+
+- Releases now include a prebuilt macOS binary for Apple Silicon. It needs only libraries that
+  ship with macOS, so it runs without Homebrew.
+
 ### Fixed
 
 - OpenAI and Codex models no longer have to fill in every optional tool parameter. GPT-6 models

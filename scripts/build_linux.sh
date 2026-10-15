@@ -2,16 +2,16 @@
 # Build the fully static Linux release binary. Requires musl (glibc cannot link NSS statically),
 # hence Alpine: runs there directly, elsewhere re-executes itself in an alpine container via
 # podman. ARCH selects the container CPU; a foreign one emulates via qemu binfmt, slowly. The
-# tested, stripped binary lands in BUILD_DIR (default build-static-<arch>) and in artifact-path
+# tested, stripped binary lands in BUILD_DIR (default build-linux-<arch>) and in artifact-path
 # when given.
-# Usage: [ARCH=cpu] [BUILD_DIR=dir] scripts/build_static.sh [artifact-path]
+# Usage: [ARCH=cpu] [BUILD_DIR=dir] scripts/build_linux.sh [artifact-path]
 
 set -eu
 
 cd "$(dirname "$0")/.."
 
 usage() {
-    printf '%s\n' 'usage: [ARCH=cpu] [BUILD_DIR=dir] scripts/build_static.sh [artifact-path]' >&2
+    printf '%s\n' 'usage: [ARCH=cpu] [BUILD_DIR=dir] scripts/build_linux.sh [artifact-path]' >&2
     exit 2
 }
 
@@ -67,10 +67,10 @@ if [ ! -f /etc/alpine-release ]; then
     # unqualified run would then silently keep emulating that foreign CPU.
     podman run --rm --arch "$platform" -v "$(pwd -P):/src" -w /src \
         ${BUILD_DIR:+--env "BUILD_DIR=$BUILD_DIR"} \
-        docker.io/library/alpine:latest sh scripts/build_static.sh "$@"
+        docker.io/library/alpine:latest sh scripts/build_linux.sh "$@"
     # Never report success unless the binary reached the host — the last resort against an
     # escape the resolution above missed.
-    out=${artifact:-${BUILD_DIR:-build-static-$arch}/hax}
+    out=${artifact:-${BUILD_DIR:-build-linux-$arch}/hax}
     if [ ! -f "$out" ]; then
         printf "error: '%s' was not written to the host; the path escapes the repository\n" \
             "$out" >&2
@@ -107,7 +107,7 @@ fi
 
 # Arch-suffixed default so emulated foreign-arch builds do not clobber the native one;
 # --wipe because the toolchain can differ between container runs.
-BUILD_DIR=${BUILD_DIR:-build-static-$(uname -m)}
+BUILD_DIR=${BUILD_DIR:-build-linux-$(uname -m)}
 export BUILD_DIR
 wipe=
 [ -d "$BUILD_DIR" ] && wipe=--wipe
