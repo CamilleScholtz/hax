@@ -7,6 +7,8 @@ notes (see [docs/releasing.md](docs/releasing.md)).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-15
+
 ### Added
 
 - Releases now include a prebuilt macOS binary for Apple Silicon. It needs only libraries that
