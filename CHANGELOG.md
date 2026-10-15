@@ -12,6 +12,9 @@ notes (see [docs/releasing.md](docs/releasing.md)).
 - OpenAI and Codex models no longer have to fill in every optional tool parameter. GPT-6 models
   could hang or run unrequested commands, and had to set a bash timeout on every call, often far
   above the two-minute default after which long commands move to the background.
+- The prebuilt Linux binaries connect over HTTPS on openSUSE and other distributions that keep
+  their CA bundle somewhere other than `/etc/ssl/certs/ca-certificates.crt`, instead of failing
+  every request with "Problem with the SSL CA cert".
 
 ## [0.6.0] - 2026-10-09
 
