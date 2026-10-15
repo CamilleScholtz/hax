@@ -12,6 +12,11 @@ notes (see [docs/releasing.md](docs/releasing.md)).
 - Releases now include a prebuilt macOS binary for Apple Silicon. It needs only libraries that
   ship with macOS, so it runs without Homebrew.
 
+### Changed
+
+- The prebuilt Linux binaries are a quarter of their former size, about 2 MB, by bundling a
+  libcurl built with only what hax needs.
+
 ### Fixed
 
 - OpenAI and Codex models no longer have to fill in every optional tool parameter. GPT-6 models

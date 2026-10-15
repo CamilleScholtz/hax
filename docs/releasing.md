@@ -25,6 +25,11 @@ release, and finally points the downstream packages at the published source tarb
 tags (`-rc.N`) are published as GitHub prereleases and skip both package bumps, so
 `releases/latest` and the packages keep tracking the newest stable release.
 
+The prebuilt binaries bundle libcurl (Linux) and jansson (macOS) at versions pinned, with their
+checksums, in `scripts/build_linux.sh` and `scripts/build_macos.sh`; the remaining Linux
+libraries come from Alpine's current packages. Before a release, bump a pin whose upstream has
+shipped security fixes since.
+
 ## Downstream packages
 
 hax is packaged in the Homebrew tap
