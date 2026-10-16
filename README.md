@@ -123,6 +123,16 @@ CLI selection flag overrides them.
 See [docs/configuration.md](./docs/configuration.md) for the file format, resolution order, presets,
 and the setting reference.
 
+## Extras
+
+Optional companions that live outside the core binary, each a small Python CLI with a skill that
+tells hax when to use it:
+
+- [hax-web](https://github.com/OleksandrChekhovskyi/hax-web) — web search and readable page
+  fetching.
+- [hax-mcp](https://github.com/OleksandrChekhovskyi/hax-mcp) — tools of MCP servers, with
+  definitions entering the model's context only as a task needs them.
+
 ## More docs
 
 - [docs/sessions.md](./docs/sessions.md) — the session-file format and the `hax --json` stream.
