@@ -7,6 +7,12 @@ notes (see [docs/releasing.md](docs/releasing.md)).
 
 ## [Unreleased]
 
+### Changed
+
+- Prompts are sent without leading blank lines or trailing whitespace, so a paste or Ctrl+G edit
+  that ends in a newline no longer echoes as empty rows. The first line keeps its indentation.
+  A prompt that is only whitespace sends nothing, and `-p` rejects it as empty.
+
 ## [0.6.1] - 2026-10-15
 
 ### Added

@@ -29,6 +29,7 @@
 #include "terminal/ui.h"
 #include "terminal/width.h"
 #include "text/display_safe.h"
+#include "text/trim.h"
 #include "text/utf8.h"
 #include "text/utf8_sanitize.h"
 #include "text/width.h"
@@ -711,15 +712,7 @@ static void open_editor(struct input *in)
     char *content = aborted ? NULL : fs_read_file(path, &n);
     unlink(path);
     if (content) {
-        /* The edit buffer is NUL-terminated; preserve embedded NUL positions as spaces. */
-        for (size_t k = 0; k < n; k++) {
-            if (content[k] == '\0')
-                content[k] = ' ';
-        }
-        /* Drop one trailing newline — most editors append one automatically. */
-        if (n > 0 && content[n - 1] == '\n')
-            content[--n] = '\0';
-        input_core_set_buffer(in, content);
+        input_core_load_edited(in, content, n);
         free(content);
     }
 
@@ -1343,6 +1336,7 @@ char *input_readline(struct input *in, const char *prompt)
             return NULL;
         char *clean = utf8_sanitize(raw, n);
         free(raw);
+        trim_prompt(clean);
         return clean;
     }
 
@@ -1448,9 +1442,8 @@ char *input_readline(struct input *in, const char *prompt)
             in->painted_cursor_row = 0;
             in->painted_rows = 0;
             break;
-        case 0x0d: /* CR — Enter; empty requires a placeholder */
-            if (in->len > 0 || in->empty_placeholder)
-                submit = 1;
+        case 0x0d: /* CR — Enter */
+            submit = input_core_submit_ready(in);
             break;
         case 0x0e: /* Ctrl-N */
             input_core_history_next(in);
@@ -1459,8 +1452,8 @@ char *input_readline(struct input *in, const char *prompt)
             input_core_history_prev(in);
             break;
         case 0x12: /* Ctrl-R — incremental reverse history search */
-            if (search_history(in) == HISTORY_SEARCH_SUBMIT && in->len > 0)
-                submit = 1;
+            if (search_history(in) == HISTORY_SEARCH_SUBMIT)
+                submit = input_core_submit_ready(in);
             break;
         case 0x15: /* Ctrl-U */
             input_core_kill_to_bol(in);

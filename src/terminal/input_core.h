@@ -118,6 +118,16 @@ void input_core_commit_paste(struct input *in, const char *body, size_t len);
  * of range. */
 void input_core_replace_span(struct input *in, size_t start, size_t end, const char *text);
 
+/* Trim the buffer as a submitted prompt (trim_prompt) and return whether it may be submitted:
+ * text remains, or an empty-submit placeholder gives an empty send a meaning. The trim stands
+ * either way, so refusing whitespace-only text leaves the buffer empty. */
+int input_core_submit_ready(struct input *in);
+
+/* Replace the buffer with `len` bytes an external editor wrote back. Embedded NULs become spaces
+ * to keep the buffer a C string, and the text is trimmed so the cursor lands after it rather than
+ * past the final newline most editors append. */
+void input_core_load_edited(struct input *in, const char *text, size_t len);
+
 /* Offset of the word that ends before `end` in `text`, after skipping the separators just before
  * `end`. Words are whitespace-delimited for Ctrl-W and alphanumeric, like readline's Meta word
  * operations, for the alnum variant. `text` may be NULL when `end` is 0. */

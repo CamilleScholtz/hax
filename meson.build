@@ -183,6 +183,7 @@ sources = files(
     'src/text/placeholder.c',
     'src/text/sha256.c',
     'src/text/shell_quote.c',
+    'src/text/trim.c',
     'src/text/url.c',
     'src/text/utf8.c',
     'src/text/utf8_sanitize.c',

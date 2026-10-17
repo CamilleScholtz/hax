@@ -126,6 +126,7 @@ test_sources = [
     'text/test_placeholder.c',
     'text/test_sha256.c',
     'text/test_shell_quote.c',
+    'text/test_trim.c',
     'text/test_url.c',
     'text/test_utf8.c',
     'text/test_utf8_sanitize.c',
