@@ -28,9 +28,9 @@
 #include "transcript.h"
 #include "xalloc.h"
 #include "render/disp.h"
+#include "render/footer.h"
 #include "render/markdown.h"
 #include "render/render_ctx.h"
-#include "render/spinner.h"
 #include "system/clock.h"
 #include "system/fs.h"
 #include "system/locale.h"
@@ -146,7 +146,7 @@ static int agent_stream_tick(void *user)
     struct render_ctx *render = user;
     /* Confirm a pause immediately; the idempotent update also overrides pending labels. */
     if (interrupt_pause_requested() && !interrupt_abort_requested()) {
-        spinner_set_label(render->spinner, "pausing", "pausing... (esc again to interrupt)");
+        footer_set_label(render->footer, "pausing", "pausing... (esc again to interrupt)");
         /* Before first content, cancel immediately; the loop maps the empty turn to a resumable
          * pause. */
         if (!render->stream.content_seen)
@@ -174,7 +174,7 @@ static int render_on_event(const struct stream_event *event, void *user)
     /* The first post-retry event returns label control to normal rendering. */
     if (event->kind != EV_RETRY && render->retry.deadline_ms) {
         render->retry.deadline_ms = 0;
-        spinner_set_label(render->spinner, "working", "working...");
+        footer_set_label(render->footer, "working", "working...");
     }
 
     /* Once output exists, a pause must preserve it by waiting for a turn seam. */
@@ -194,7 +194,7 @@ static int render_on_event(const struct stream_event *event, void *user)
         if (tool_name && *tool_name) {
             char label[64];
             snprintf(label, sizeof(label), "[%s] composing...", tool_name);
-            spinner_request_label(render->spinner, "compose", label);
+            footer_request_label(render->footer, "compose", label);
         }
         break;
     }
@@ -203,7 +203,7 @@ static int render_on_event(const struct stream_event *event, void *user)
         break;
     case EV_TOOL_CALL_END:
         /* Clear the composing label after args; settling hides normal dispatch latency. */
-        spinner_request_label(render->spinner, "working", "working...");
+        footer_request_label(render->footer, "working", "working...");
         break;
     case EV_TOOL_CALL_DELTA:
         /* No live display: tool calls render as a single block during
@@ -211,7 +211,7 @@ static int render_on_event(const struct stream_event *event, void *user)
         break;
     case EV_REASONING_DELTA: {
         /* Keep the thinking label even when reasoning text is hidden. */
-        spinner_request_label(render->spinner, "thinking", "thinking...");
+        footer_request_label(render->footer, "thinking", "thinking...");
         const char *reasoning_text = event->u.reasoning_delta.text;
         if (!render->show_reasoning || !reasoning_text || !*reasoning_text)
             break;
@@ -249,7 +249,7 @@ static int render_on_event(const struct stream_event *event, void *user)
         char label[32];
         snprintf(label, sizeof(label), "processing... %d%%", percentage);
         /* One key preserves the settle clock while percentages refresh. */
-        spinner_request_label(render->spinner, "processing", label);
+        footer_request_label(render->footer, "processing", label);
         break;
     }
     case EV_DONE:
@@ -893,7 +893,7 @@ int agent_compact(struct agent_state *state, const char *instructions, int autom
     render_set_mode(render, RENDER_IDLE);
 
     render_stream_begin(render);
-    spinner_set_label(render->spinner, "compacting", "compacting...");
+    footer_set_label(render->footer, "compacting", "compacting...");
     struct compact_params params = {
         .session = session,
         .provider = provider,
@@ -1018,7 +1018,7 @@ static void repl_loop_task_note(const char *text, void *user)
 {
     struct repl_loop_ctx *ctx = user;
     struct render_ctx *render = ctx->state->render;
-    spinner_hide(render->spinner);
+    footer_hide(render->footer);
     render_set_mode(render, RENDER_IDLE);
     render_open_block(render);
     disp_write_ansi(&render->disp, ANSI_DIM);
@@ -1108,7 +1108,7 @@ int agent_run(struct provider **provider_io, const struct hax_opts *options)
      * by this frame. */
     struct render_ctx render = {.disp = {.sink = stdout, .committed_newlines = 1},
                                 .show_reasoning = reasoning_visible()};
-    render.spinner = spinner_new("working...");
+    render.footer = footer_new("working...");
     render.md = markdown_enabled() ? md_new(md_emit_to_disp, &render.disp, md_cols()) : NULL;
     /* Transcript logging is optional; its API is NULL-safe. */
     struct transcript_log *transcript =
@@ -1277,8 +1277,8 @@ int agent_run(struct provider **provider_io, const struct hax_opts *options)
         int user_turn_errored = 0;
 
         /* Reset promoted spinner state before timing the new user turn. */
-        spinner_set_label(render.spinner, "working", "working...");
-        spinner_set_timer(render.spinner, user_turn_start_ms);
+        footer_set_label(render.footer, "working", "working...");
+        footer_set_timer(render.footer, user_turn_start_ms);
 
         /* Clear stale editor interrupts before arming first-Esc pause and second-Esc abort. */
         interrupt_clear_requests();
@@ -1313,7 +1313,7 @@ int agent_run(struct provider **provider_io, const struct hax_opts *options)
         interrupt_disarm();
         /* Snapshot Esc before auto-compaction clears the interrupt latch. */
         int user_pressed_escape = interrupt_pause_requested();
-        spinner_set_timer(render.spinner, 0);
+        footer_set_timer(render.footer, 0);
 
         /* Close active rendering before post-turn output can emit terminal control sequences. */
         render_set_mode(&render, RENDER_IDLE);
@@ -1356,7 +1356,7 @@ int agent_run(struct provider **provider_io, const struct hax_opts *options)
 
     *provider_io = current_provider;
 
-    spinner_free(render.spinner);
+    footer_free(render.footer);
     input_free(input);
     if (render.md)
         md_free(render.md);

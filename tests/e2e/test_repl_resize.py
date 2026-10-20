@@ -4,6 +4,7 @@ terminal has rewrapped what they painted, and the repaint must start on the righ
 no stale rows behind."""
 
 import json
+import time
 
 import harness
 
@@ -28,6 +29,27 @@ def test_prompt_rewraps():
           india juliet kilo lima mike
           november oscar papa quebec
           romeo sierra tangoX
+        """
+    )
+
+
+def test_caret_at_row_end_survives_exact_width_resize():
+    """A narrowing to exactly the width of the caret's row leaves the rows above the prompt intact."""
+    term = harness.Terminal("")
+    term.wait_for("❯")
+    # After the 2-cell prompt, these 28 characters fill 30 cells with the caret just past them.
+    term.type("abcdefghijklmnopqrstuvwxyz12")
+    term.wait_for("z12")
+
+    term.resize(30, 24)
+    term.send("C-a")
+    term.expect_screen(
+        """
+        ▌ hax › mock · mock-model
+        ▌ ctrl-d quit · try /help
+
+        ❯ abcdefghijklmnopqrstuvwxyz1
+          2
         """
     )
 
@@ -73,6 +95,39 @@ def test_picker_rewraps():
         ▌ /preset
 
         ❯
+        """
+    )
+
+
+def test_status_row_survives_exact_width_resize():
+    """A narrowing to exactly the status row's width leaves the conversation above it intact."""
+    term = harness.Terminal(
+        """
+        delay 30000
+        text Never delivered.
+        end-turn
+        """
+    )
+    term.wait_for("❯")
+    term.type("go")
+    term.send("Enter")
+    term.wait_for("working...")
+
+    # The 12-cell status row exactly fills a 12-column row, where tmux keeps the cursor after it.
+    for _ in range(2):
+        term.resize(12, 24)
+        # The footer repaints on its animation timer, not on a key; let frames land at each width.
+        time.sleep(0.3)
+        term.resize(80, 24)
+        time.sleep(0.3)
+    term.expect_screen(
+        """
+        ▌ hax › mock · mock-model
+        ▌ ctrl-d quit · try /help
+
+        ▌ go
+
+        {*} working...
         """
     )
 

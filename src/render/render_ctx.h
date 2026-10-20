@@ -6,7 +6,7 @@
 
 #include "render/disp.h"
 
-struct spinner;
+struct footer;
 struct md_renderer;
 
 enum render_mode {
@@ -17,11 +17,11 @@ enum render_mode {
     RENDER_TOOL_CLUSTER, /* collapsed tool calls; persists across stream boundaries */
 };
 
-/* Live terminal rendering state. The context does not own spinner or md. */
+/* Live terminal rendering state. The context does not own footer or md. */
 struct render_ctx {
     enum render_mode mode;
     struct disp disp;
-    struct spinner *spinner;
+    struct footer *footer;
     struct md_renderer *md; /* NULL disables Markdown rendering */
 
     struct {

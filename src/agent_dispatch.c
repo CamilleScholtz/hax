@@ -12,8 +12,8 @@
 #include "tool.h"
 #include "xalloc.h"
 #include "render/disp.h"
+#include "render/footer.h"
 #include "render/render_ctx.h"
-#include "render/spinner.h"
 #include "render/tool_render.h"
 #include "terminal/ansi.h"
 #include "terminal/theme.h"
@@ -323,12 +323,12 @@ static struct item dispatch_tool_call_collapsed(struct render_ctx *render,
                                                 struct agent_tool_call *prepared, int image_input)
 {
     const struct item *call = &prepared->effective;
-    struct spinner *spinner = render->spinner;
+    struct footer *footer = render->footer;
     int is_read = strcmp(call->tool_name, "read") == 0;
 
     /* The swap keeps the indicator continuous: the erase that restores the cursor to an open
      * read line, the appended cluster text, and the reparked spinner land as one frame. */
-    spinner_swap_begin(spinner);
+    footer_swap_begin(footer);
     write_cluster_line(render, call);
 
     /* Preserve the open line's cursor column for the next read. */
@@ -336,13 +336,13 @@ static struct item dispatch_tool_call_collapsed(struct render_ctx *render,
     char request_key[32];
     snprintf(label, sizeof(label), "[%s] running...", call->tool_name);
     snprintf(request_key, sizeof(request_key), "run:%s", call->tool_name);
-    spinner_request_label(spinner, request_key, label);
-    spinner_park(spinner, is_read ? (int)render->disp.column : 0);
-    spinner_swap_end(spinner);
+    footer_request_label(footer, request_key, label);
+    footer_park(footer, is_read ? (int)render->disp.column : 0);
+    footer_swap_end(footer);
 
     struct tool_run_ctx run_ctx = {.image_input = image_input};
     char *output = agent_tool_call_run(prepared, &run_ctx);
-    spinner_request_label(spinner, "working", "working...");
+    footer_request_label(footer, "working", "working...");
 
     struct item result = agent_tool_result_make(call, output, &run_ctx);
     free(output);
@@ -354,7 +354,7 @@ void render_tool_solo_marker(struct render_ctx *render, const char *text)
     struct disp *disp = &render->disp;
     /* Replacing the spinner (or a live placeholder row) with the marker is a swap, so it
      * cannot render as blank-and-repaint. */
-    spinner_swap_begin(render->spinner);
+    footer_swap_begin(render->footer);
     tool_render_write_marker_gutter(disp);
     disp_write_ansi(disp, ANSI_DIM);
     int available_cells = display_width() - TOOL_RENDER_GUTTER_COLS;
@@ -367,7 +367,7 @@ void render_tool_solo_marker(struct render_ctx *render, const char *text)
     free(line);
     disp_write_ansi(disp, ANSI_RESET);
     disp_putc(disp, '\n');
-    spinner_swap_end(render->spinner);
+    footer_swap_end(render->footer);
     disp_flush(disp);
 }
 
@@ -379,16 +379,16 @@ static struct item dispatch_tool_call_verbose(struct render_ctx *render,
     const struct item *call = &prepared->effective;
     const struct tool *tool = prepared->tool;
     struct disp *disp = &render->disp;
-    struct spinner *spinner = render->spinner;
+    struct footer *footer = render->footer;
     write_tool_header(disp, call);
-    /* A deferred "running" label could surface after the tool-status row releases the spinner. */
-    spinner_set_label(spinner, "working", "working...");
+    /* A deferred "running" label could surface after the tool-status rows release the footer. */
+    footer_set_label(footer, "working", "working...");
 
     /* Diff mode is selected from the completed output so errors remain plain previews. */
     enum tool_render_mode mode =
         preview_mode == TOOL_PREVIEW_HEAD_TAIL ? TOOL_RENDER_HEAD_TAIL : TOOL_RENDER_HEAD;
     struct tool_render renderer;
-    tool_render_init(&renderer, disp, spinner, mode);
+    tool_render_init(&renderer, disp, footer, mode);
     /* An empty live row instead of a parked "working..." label: the indicator sits in the block
      * and the first output line replaces it in place, so a fast tool never blinks a label. */
     tool_render_begin_live(&renderer);
@@ -413,7 +413,7 @@ static struct item dispatch_tool_call_verbose(struct render_ctx *render,
         }
     }
     tool_render_finalize(&renderer);
-    spinner_hide(spinner);
+    footer_hide(footer);
 
     /* Use actual rendered rows: control stripping can erase otherwise non-empty display bytes. */
     if (tool_has_diff_output(tool) && renderer.display_was_called && renderer.rows_emitted == 0 &&

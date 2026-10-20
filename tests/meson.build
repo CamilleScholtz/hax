@@ -85,6 +85,7 @@ test_sources = [
     'render/test_ctrl_strip.c',
     'render/test_diff_color.c',
     'render/test_disp.c',
+    'render/test_footer.c',
     'render/test_markdown.c',
     'render/test_markdown_scan.c',
     'render/test_markdown_table.c',

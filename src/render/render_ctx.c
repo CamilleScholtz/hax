@@ -4,8 +4,8 @@
 #include <stdio.h>
 
 #include "render/disp.h"
+#include "render/footer.h"
 #include "render/markdown.h"
-#include "render/spinner.h"
 #include "system/clock.h"
 #include "terminal/ansi.h"
 
@@ -13,7 +13,7 @@ static int hide_table_spinner(struct render_ctx *render)
 {
     if (!render->table.spinner_visible)
         return 0;
-    spinner_hide(render->spinner);
+    footer_hide(render->footer);
     render->table.spinner_visible = 0;
     return 1;
 }
@@ -24,7 +24,7 @@ static void close_mode(struct render_ctx *render)
     case RENDER_IDLE:
         break;
     case RENDER_WAITING:
-        spinner_hide(render->spinner);
+        footer_hide(render->footer);
         break;
     case RENDER_REASONING:
         if (render->md)
@@ -38,7 +38,7 @@ static void close_mode(struct render_ctx *render)
         break;
     case RENDER_TOOL_CLUSTER:
         /* Hide first because a parked spinner restores the cluster cursor position. */
-        spinner_hide(render->spinner);
+        footer_hide(render->footer);
         if (render->cluster.line_open)
             disp_putc(&render->disp, '\n');
         disp_flush(&render->disp);
@@ -55,11 +55,11 @@ static void open_mode(struct render_ctx *render, enum render_mode mode)
         break;
     case RENDER_WAITING:
         disp_block_separator(&render->disp);
-        spinner_set_label(render->spinner, "working", "working...");
-        spinner_show(render->spinner);
+        footer_set_label(render->footer, "working", "working...");
+        footer_show(render->footer);
         break;
     case RENDER_REASONING:
-        spinner_hide(render->spinner);
+        footer_hide(render->footer);
         disp_block_separator(&render->disp);
         disp_write_ansi(&render->disp, ANSI_DIM ANSI_ITALIC);
         /* Markdown styling would override the surrounding reasoning style. */
@@ -67,17 +67,17 @@ static void open_mode(struct render_ctx *render, enum render_mode mode)
             md_set_styled(render->md, 0);
         break;
     case RENDER_TEXT:
-        spinner_hide(render->spinner);
+        footer_hide(render->footer);
         disp_block_separator(&render->disp);
         render->stream.answer_started = 1;
         if (render->md)
             md_set_styled(render->md, 1);
         break;
     case RENDER_TOOL_CLUSTER:
-        spinner_hide(render->spinner);
+        footer_hide(render->footer);
         disp_block_separator(&render->disp);
         /* The parked row must not inherit a label from the previous mode. */
-        spinner_set_label(render->spinner, "working", "working...");
+        footer_set_label(render->footer, "working", "working...");
         break;
     }
 }
@@ -99,14 +99,14 @@ static void render_wait_for_stream(struct render_ctx *render)
     render->table.started_at_ms = 0;
     render_set_mode(render, RENDER_WAITING);
     /* Deferred labels prevent rapid item boundaries from flickering. */
-    spinner_request_label(render->spinner, "working", "working...");
-    spinner_show(render->spinner);
+    footer_request_label(render->footer, "working", "working...");
+    footer_show(render->footer);
 }
 
 void render_stream_boundary(struct render_ctx *render)
 {
     if (render->mode == RENDER_TOOL_CLUSTER) {
-        spinner_request_label(render->spinner, "working", "working...");
+        footer_request_label(render->footer, "working", "working...");
         return;
     }
     render_wait_for_stream(render);
@@ -149,8 +149,8 @@ void render_stream_retry(struct render_ctx *render)
 void render_open_block(struct render_ctx *render)
 {
     render_set_mode(render, RENDER_IDLE);
-    /* Tool-status rows are spinner-owned but are not represented by render_mode. */
-    spinner_hide(render->spinner);
+    /* Tool-status rows are footer-owned but are not represented by render_mode. */
+    footer_hide(render->footer);
     disp_block_separator(&render->disp);
 }
 
@@ -161,8 +161,8 @@ void render_show_table_spinner(struct render_ctx *render)
 
     /* The spinner's erase-line sequence must land below already-rendered text. */
     disp_commit_newlines(&render->disp);
-    spinner_set_label(render->spinner, "composing", "composing...");
-    spinner_show(render->spinner);
+    footer_set_label(render->footer, "composing", "composing...");
+    footer_show(render->footer);
     render->table.spinner_visible = 1;
 }
 
@@ -226,5 +226,5 @@ void render_update_retry_label(struct render_ctx *render)
 {
     char label[64];
     render_retry_label(render, monotonic_ms(), label, sizeof(label));
-    spinner_set_label(render->spinner, "retry", label);
+    footer_set_label(render->footer, "retry", label);
 }

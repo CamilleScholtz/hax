@@ -109,6 +109,20 @@ static void test_rewind_follows_cursor_into_rewrapped_row(void)
     live_region_free(&region);
 }
 
+static void test_rewind_keeps_cursor_after_row_end_on_its_row(void)
+{
+    struct live_region region = {0};
+    /* Narrowed to exactly the row's width, the cursor after it stays in the row's final cell. */
+    int widths[] = {5, 12};
+    paint_rows(&region, widths, 2, 1, 12);
+    expect_rewind(&region, 12, "\x1b[1A\r");
+
+    int rewrapped[] = {24};
+    paint_rows(&region, rewrapped, 1, 0, 24);
+    expect_rewind(&region, 12, "\x1b[1A\r");
+    live_region_free(&region);
+}
+
 static void test_unknown_width_assumes_no_rewrap(void)
 {
     struct live_region region = {0};
@@ -180,6 +194,7 @@ int main(void)
     test_rewind_counts_rewrapped_rows_above_cursor();
     test_rewind_ignores_rewrap_below_cursor();
     test_rewind_follows_cursor_into_rewrapped_row();
+    test_rewind_keeps_cursor_after_row_end_on_its_row();
     test_unknown_width_assumes_no_rewrap();
     test_erase_clears_each_screen_row();
     test_leave_moves_to_last_screen_row();

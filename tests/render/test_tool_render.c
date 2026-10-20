@@ -107,7 +107,7 @@ static void test_partial_trailing_line_committed(void)
     EXPECT(d.pending_newlines == 1);
 }
 
-static void test_completed_line_held_silently_without_spinner(void)
+static void test_completed_line_held_silently_without_footer(void)
 {
     capture_reset();
     struct disp d = {0};
@@ -399,7 +399,7 @@ static void test_begin_live_without_output_leaves_no_rows(void)
     EXPECT(r.rows_emitted == 0);
 }
 
-static void test_begin_live_without_spinner_matches_plain_render(void)
+static void test_begin_live_without_footer_matches_plain_render(void)
 {
     capture_reset();
     struct disp d = {0};
@@ -410,7 +410,7 @@ static void test_begin_live_without_spinner_matches_plain_render(void)
     tool_render_finalize(&r);
     tool_render_free(&r);
     const char *out = capture_read();
-    /* Without a spinner there is no placeholder row; the block matches a plain render. */
+    /* Without a footer there is no placeholder row; the block matches a plain render. */
     EXPECT(strstr(out, STRIP_FIRST ANSI_DIM "first") != NULL);
     EXPECT(strstr(out, STRIP_BODY ANSI_DIM "second" ANSI_RESET STRIP_CLOSE) != NULL);
     EXPECT(r.rows_emitted == 2);
@@ -594,7 +594,7 @@ int main(void)
     test_head_only_under_cap_shows_all_lines();
     test_single_line_uses_solo_close();
     test_partial_trailing_line_committed();
-    test_completed_line_held_silently_without_spinner();
+    test_completed_line_held_silently_without_footer();
     test_next_line_commits_prior_line();
     test_blank_lines_elided_between_content();
     test_whitespace_only_lines_elided();
@@ -618,7 +618,7 @@ int main(void)
     test_ctrl_bytes_dropped_before_render();
     test_emit_callback_sets_flag();
     test_begin_live_without_output_leaves_no_rows();
-    test_begin_live_without_spinner_matches_plain_render();
+    test_begin_live_without_footer_matches_plain_render();
     test_finalize_is_idempotent();
     test_blank_lines_after_cap_dont_emit_phantom_footer();
     test_head_tail_blank_only_suppression_no_phantom_marker();

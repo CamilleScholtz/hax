@@ -11,9 +11,9 @@
 #include "tool.h"
 #include "xalloc.h"
 #include "render/disp.h"
+#include "render/footer.h"
 #include "render/markdown.h"
 #include "render/render_ctx.h"
-#include "render/spinner.h"
 #include "system/locale.h"
 
 static char *run_mode_probe(const char *args_json, struct tool_run_ctx *ctx)
@@ -157,10 +157,10 @@ static const char *run_write(const char *path, const char *content_json, struct 
     cap_reset();
     struct render_ctx render = {0};
     render.mode = RENDER_IDLE;
-    render.spinner = spinner_new(NULL);
+    render.footer = footer_new(NULL);
     *out = dispatch_tool_call(&render, &call, -1);
     const char *cap = cap_read();
-    spinner_free(render.spinner);
+    footer_free(render.footer);
 
     free(call.call_id);
     free(call.tool_name);
@@ -221,7 +221,7 @@ static void test_selector_overrides_non_collapsed_mode(void)
         .tool_name = xstrdup("mode-probe"),
         .tool_arguments_json = xstrdup("{}"),
     };
-    struct render_ctx render = {.mode = RENDER_IDLE, .spinner = spinner_new(NULL)};
+    struct render_ctx render = {.mode = RENDER_IDLE, .footer = footer_new(NULL)};
 
     cap_reset();
     struct item result = dispatch_tool_call(&render, &call, -1);
@@ -230,7 +230,7 @@ static void test_selector_overrides_non_collapsed_mode(void)
     EXPECT(strstr(cap, "more line") != NULL);
     EXPECT(strstr(cap, "tail-marker") == NULL);
     item_free(&result);
-    spinner_free(render.spinner);
+    footer_free(render.footer);
     item_free(&call);
 }
 
@@ -245,7 +245,7 @@ static void test_hidden_tail_not_displayed_by_fallback(void)
         .tool_name = xstrdup("tail-probe"),
         .tool_arguments_json = xstrdup("{}"),
     };
-    struct render_ctx render = {.mode = RENDER_IDLE, .spinner = spinner_new(NULL)};
+    struct render_ctx render = {.mode = RENDER_IDLE, .footer = footer_new(NULL)};
 
     cap_reset();
     struct item result = dispatch_tool_call(&render, &call, -1);
@@ -257,7 +257,7 @@ static void test_hidden_tail_not_displayed_by_fallback(void)
     EXPECT(result.output && strstr(result.output, "model-only note") != NULL);
     EXPECT(result.output_hidden_tail == strlen("\n[model-only note]"));
     item_free(&result);
-    spinner_free(render.spinner);
+    footer_free(render.footer);
     item_free(&call);
 }
 

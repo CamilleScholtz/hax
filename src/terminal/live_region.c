@@ -23,15 +23,26 @@ static int screen_rows(const int *row_widths, int count, int terminal_cols)
     return terminal_cols > 0 ? reflow_physical_rows(row_widths, count, terminal_cols) : count;
 }
 
+/* Screen rows from the start of the cursor's row to the cursor. A cursor at or past the end of the
+ * row's content stays with that content: when a rewrap exactly fills the content's last screen
+ * row, the cursor stays in its final cell instead of moving to a row of its own. */
+static int cursor_offset(const struct live_region *region, int terminal_cols)
+{
+    if (terminal_cols <= 0)
+        return 0;
+    int width = region->row_widths[region->cursor_row];
+    if (region->cursor_col >= width && width > 0)
+        return (width - 1) / terminal_cols;
+    return region->cursor_col / terminal_cols;
+}
+
 /* Physical rows between the region's top and the cursor's row, under the current width. */
 static int cursor_climb(const struct live_region *region, int terminal_cols)
 {
     if (region->row_count == 0)
         return 0;
-    int climb = screen_rows(region->row_widths, region->cursor_row, terminal_cols);
-    if (terminal_cols > 0)
-        climb += region->cursor_col / terminal_cols;
-    return climb;
+    return screen_rows(region->row_widths, region->cursor_row, terminal_cols) +
+           cursor_offset(region, terminal_cols);
 }
 
 void live_region_free(struct live_region *region)
