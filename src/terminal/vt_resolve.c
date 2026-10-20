@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include "xalloc.h"
+#include "terminal/escape.h"
 #include "text/utf8.h"
 
 enum segment_kind {
@@ -482,11 +483,13 @@ static void row_commit(struct terminal_row *row, struct sgr_state *carried,
     *carried = *current;
 }
 
+/* Read the final byte and first numeric parameter of a complete CSI sequence. */
 static void parse_csi(const char *bytes, size_t len, struct escape_sequence *escape)
 {
+    escape->kind = ESCAPE_CSI;
+    escape->final = bytes[len - 1];
     bool reading_first = true;
-    size_t index = 2;
-    while (index < len) {
+    for (size_t index = 2; index + 1 < len; index++) {
         unsigned char byte = (unsigned char)bytes[index];
         if (byte >= '0' && byte <= '9') {
             if (reading_first) {
@@ -497,54 +500,20 @@ static void parse_csi(const char *bytes, size_t len, struct escape_sequence *esc
                     escape->first_param = escape->first_param * 10 + digit;
                 escape->has_first_param = true;
             }
-            index++;
-            continue;
-        }
-        if (byte == ';' || byte == ':') {
+        } else if (byte == ';' || byte == ':') {
             reading_first = false;
-            index++;
-            continue;
         }
-        if (byte == '?') {
-            index++;
-            continue;
-        }
-        if (byte >= 0x40 && byte <= 0x7e) {
-            escape->kind = ESCAPE_CSI;
-            escape->final = (char)byte;
-            escape->byte_len = ++index;
-            return;
-        }
-        index++;
     }
 }
 
-/* Unterminated sequences consume the remaining input so their payload is not rendered twice. */
+/* Unterminated sequences consume the remaining input so their payload is not rendered twice; an
+ * unterminated CSI is not modeled. */
 static struct escape_sequence parse_escape(const char *bytes, size_t len)
 {
-    struct escape_sequence escape = {.byte_len = len};
-    if (len < 2)
-        return escape;
-
-    if (bytes[1] == '[') {
-        parse_csi(bytes, len, &escape);
-        return escape;
-    }
-    if (bytes[1] == ']') {
-        for (size_t i = 2; i < len; i++) {
-            if (bytes[i] == '\a') {
-                escape.byte_len = i + 1;
-                return escape;
-            }
-            if (bytes[i] == 0x1b && i + 1 < len && bytes[i + 1] == '\\') {
-                escape.byte_len = i + 2;
-                return escape;
-            }
-        }
-        return escape;
-    }
-
-    escape.byte_len = 2;
+    struct escape_sequence escape = {.byte_len = escape_sequence_len(bytes, len)};
+    unsigned char final = (unsigned char)bytes[escape.byte_len - 1];
+    if (escape.byte_len >= 3 && bytes[1] == '[' && final >= 0x40 && final <= 0x7e)
+        parse_csi(bytes, escape.byte_len, &escape);
     return escape;
 }
 

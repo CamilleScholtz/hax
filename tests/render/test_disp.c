@@ -5,6 +5,7 @@
 
 #include "harness.h"
 #include "render/disp.h"
+#include "system/locale.h"
 
 struct capture {
     struct disp disp;
@@ -257,6 +258,88 @@ static void test_external_line_resynchronizes_separator(void)
     capture_free(&capture);
 }
 
+static void test_column_counts_cells_not_escapes(void)
+{
+    struct capture capture;
+    if (!capture_init(&capture, 0))
+        return;
+
+    /* A wide and an accented codepoint around an SGR run. */
+    const char *styled = "a\xe7\x95\x8c\x1b[1m\xc3\xa9\x1b[0m";
+    disp_write(&capture.disp, styled, strlen(styled));
+    disp_write_ansi(&capture.disp, "\x1b[2m");
+    disp_putc(&capture.disp, 'c');
+    EXPECT(capture.disp.column == 5);
+
+    disp_write(&capture.disp, "\t", 1);
+    EXPECT(capture.disp.column == 8);
+    capture_free(&capture);
+}
+
+static void test_column_follows_the_cursor_row(void)
+{
+    struct capture capture;
+    if (!capture_init(&capture, 0))
+        return;
+
+    disp_write(&capture.disp, "first\nrow", 9);
+    EXPECT(capture.disp.column == 3);
+    disp_write(&capture.disp, "ab\r", 3);
+    EXPECT(capture.disp.column == 0);
+
+    /* A pending newline is not written yet, so the cursor is still on the row. */
+    disp_write(&capture.disp, "text\n", 5);
+    EXPECT(capture.disp.column == 4);
+    disp_commit_newlines(&capture.disp);
+    EXPECT(capture.disp.column == 0);
+
+    disp_write(&capture.disp, "x", 1);
+    disp_block_separator(&capture.disp);
+    EXPECT(capture.disp.column == 0);
+
+    disp_write(&capture.disp, "y", 1);
+    fputs("external\n", capture.stream);
+    disp_sync_external_line(&capture.disp);
+    EXPECT(capture.disp.column == 0);
+    capture_free(&capture);
+}
+
+static void write_bytewise(struct disp *disp, const char *bytes)
+{
+    for (size_t i = 0; bytes[i]; i++)
+        disp_write(disp, bytes + i, 1);
+}
+
+static void test_column_survives_split_writes(void)
+{
+    struct capture capture;
+    if (!capture_init(&capture, 0))
+        return;
+
+    write_bytewise(&capture.disp, "\xe7\x95\x8c");
+    EXPECT(capture.disp.column == 2);
+    write_bytewise(&capture.disp, "\x1b[31mX");
+    EXPECT(capture.disp.column == 3);
+    capture_free(&capture);
+}
+
+static void test_new_row_drops_partial_sequences(void)
+{
+    struct capture capture;
+    if (!capture_init(&capture, 0))
+        return;
+
+    disp_write(&capture.disp, "\xe7\x95\n", 3);
+    disp_write(&capture.disp, "a", 1);
+    EXPECT(capture.disp.column == 1);
+
+    const char *unterminated = "\x1b]8;;unterminated\n";
+    disp_write(&capture.disp, unterminated, strlen(unterminated));
+    disp_write(&capture.disp, "b", 1);
+    EXPECT(capture.disp.column == 1);
+    capture_free(&capture);
+}
+
 static void test_null_sink_selects_stdout(void)
 {
     struct disp disp = {0};
@@ -265,6 +348,7 @@ static void test_null_sink_selects_stdout(void)
 
 int main(void)
 {
+    locale_init_utf8();
     test_putc_writes_visible_bytes();
     test_putc_defers_trailing_newlines();
     test_visible_byte_commits_pending_newlines();
@@ -280,6 +364,10 @@ int main(void)
     test_printf_uses_display_newline_handling();
     test_ansi_write_does_not_commit_pending_newline();
     test_external_line_resynchronizes_separator();
+    test_column_counts_cells_not_escapes();
+    test_column_follows_the_cursor_row();
+    test_column_survives_split_writes();
+    test_new_row_drops_partial_sequences();
     test_null_sink_selects_stdout();
 
     T_REPORT();

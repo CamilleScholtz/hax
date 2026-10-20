@@ -26,8 +26,7 @@ struct render_ctx {
 
     struct {
         const char *last_tool; /* borrowed registry-static name */
-        int line_open;
-        int line_cells; /* also the parked spinner's cursor-restore column */
+        int line_open;         /* a read row awaiting more reads; disp.column is its width */
     } cluster;
 
     struct {

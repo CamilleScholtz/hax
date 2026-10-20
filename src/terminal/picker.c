@@ -14,6 +14,7 @@
 #include "xalloc.h"
 #include "system/locale.h"
 #include "terminal/ansi.h"
+#include "terminal/escape.h"
 #include "terminal/input_core.h"
 #include "terminal/live_region.h"
 #include "terminal/picker_core.h"
@@ -204,17 +205,9 @@ static int append_clipped_line(struct buf *output, const char *line, size_t line
     size_t offset = 0;
     while (offset < line_len) {
         if ((unsigned char)line[offset] == 0x1b) {
-            size_t escape_end = offset + 1;
-            if (escape_end < line_len && line[escape_end] == '[') {
-                escape_end++;
-                while (escape_end < line_len &&
-                       !(line[escape_end] >= 0x40 && line[escape_end] <= 0x7e))
-                    escape_end++;
-                if (escape_end < line_len)
-                    escape_end++;
-            }
-            buf_append(output, line + offset, escape_end - offset);
-            offset = escape_end;
+            size_t escape_len = escape_sequence_len(line + offset, line_len - offset);
+            buf_append(output, line + offset, escape_len);
+            offset += escape_len;
             continue;
         }
 

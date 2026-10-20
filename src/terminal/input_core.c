@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "xalloc.h"
+#include "terminal/escape.h"
 #include "terminal/input.h"
 #include "terminal/live_region.h"
 #include "text/display_safe.h"
@@ -74,12 +75,8 @@ int input_core_prompt_width(const char *prompt)
         unsigned char byte = (unsigned char)prompt[offset];
         if (byte == '\n')
             break;
-        if (byte == 0x1b && offset + 1 < len && prompt[offset + 1] == '[') {
-            offset += 2;
-            while (offset < len && (unsigned char)prompt[offset] < 0x40)
-                offset++;
-            if (offset < len)
-                offset++;
+        if (byte == 0x1b) {
+            offset += escape_sequence_len(prompt + offset, len - offset);
             continue;
         }
 

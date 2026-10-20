@@ -188,14 +188,12 @@ static void test_stream_begin_preserves_tool_cluster(void)
     render_set_mode(&fixture.render, RENDER_TOOL_CLUSTER);
     fixture.render.cluster.last_tool = "read";
     fixture.render.cluster.line_open = 1;
-    fixture.render.cluster.line_cells = 12;
     fixture.render.stream.content_seen = 1;
     render_stream_begin(&fixture.render);
 
     EXPECT(fixture.render.mode == RENDER_TOOL_CLUSTER);
     EXPECT_STR_EQ(fixture.render.cluster.last_tool, "read");
     EXPECT(fixture.render.cluster.line_open);
-    EXPECT(fixture.render.cluster.line_cells == 12);
     EXPECT(!fixture.render.stream.content_seen);
     fixture_destroy(&fixture);
 }
@@ -264,12 +262,10 @@ static void test_closing_tool_cluster_resets_substate(void)
     render_set_mode(&fixture.render, RENDER_TOOL_CLUSTER);
     fixture.render.cluster.last_tool = "read";
     fixture.render.cluster.line_open = 1;
-    fixture.render.cluster.line_cells = 12;
     render_set_mode(&fixture.render, RENDER_IDLE);
 
     EXPECT(fixture.render.cluster.last_tool == NULL);
     EXPECT(!fixture.render.cluster.line_open);
-    EXPECT(fixture.render.cluster.line_cells == 0);
     fixture_destroy(&fixture);
 }
 

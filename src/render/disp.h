@@ -5,6 +5,9 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "terminal/escape.h"
+#include "text/utf8.h"
+
 /* Block-aware output for separating visual blocks with exactly one blank line.
  *
  * Content writes defer trailing line endings so disp_block_separator() can collapse them to the
@@ -16,6 +19,13 @@ struct disp {
     FILE *sink; /* borrowed; NULL selects stdout */
     size_t committed_newlines;
     size_t pending_newlines;
+    /* Cells from the start of the cursor's row to the cursor, as written through disp: escape
+     * sequences and pending newlines take none, and rows wider than the terminal are not folded.
+     * A direct visible write leaves it stale until the next line ending. */
+    size_t column;
+    /* A codepoint or escape sequence split across writes, carried to the next one. */
+    struct utf8_cell_stream cell_stream;
+    enum escape_scan_state escape_state;
 };
 
 FILE *disp_sink(const struct disp *disp);

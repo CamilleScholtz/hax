@@ -6,9 +6,11 @@
 
 #include "agent_dispatch.h"
 #include "harness.h"
+#include "output.h"
 #include "provider.h"
 #include "tool.h"
 #include "xalloc.h"
+#include "render/disp.h"
 #include "render/markdown.h"
 #include "render/render_ctx.h"
 #include "render/spinner.h"
@@ -47,6 +49,11 @@ static const struct tool TOOL_TAIL_PROBE = {
     .display = {.preview_mode = TOOL_PREVIEW_HEAD_TAIL},
 };
 
+static const struct tool TOOL_READ_STUB = {
+    .def = {.name = "read"},
+    .display = {.arg_name = "path"},
+};
+
 /* agent_find_tool lives in agent_core.c alongside the full tool table; stub it
  * so this test links only its own tools and the render stack. */
 const struct tool *agent_find_tool(const char *name)
@@ -57,6 +64,8 @@ const struct tool *agent_find_tool(const char *name)
         return &TOOL_MODE_PROBE;
     if (strcmp(name, "tail-probe") == 0)
         return &TOOL_TAIL_PROBE;
+    if (strcmp(name, "read") == 0)
+        return &TOOL_READ_STUB;
     return NULL;
 }
 
@@ -252,6 +261,36 @@ static void test_hidden_tail_not_displayed_by_fallback(void)
     item_free(&call);
 }
 
+static void render_collapsed_read(struct render_ctx *render, const char *path)
+{
+    struct item call = {
+        .kind = ITEM_TOOL_CALL,
+        .call_id = xstrdup("call-read"),
+        .tool_name = xstrdup("read"),
+        .tool_arguments_json = xasprintf("{\"path\":\"%s\"}", path),
+    };
+    render_collapsed_tool_call(render, &call);
+    item_free(&call);
+}
+
+static void test_collapsed_reads_share_a_row_until_it_is_full(void)
+{
+    setenv("HAX_DISPLAY_WIDTH", "40", 1);
+    struct render_ctx render = {.mode = RENDER_TOOL_CLUSTER};
+
+    cap_reset();
+    render_collapsed_read(&render, "src/a.c");
+    render_collapsed_read(&render, "src/b.c");
+    /* 23 cells are used; this one would end past the row's last free cell. */
+    render_collapsed_read(&render, "src/some/longer.c");
+    disp_flush(&render.disp);
+
+    char *plain = t_strip_sgr(cap_read());
+    EXPECT_STR_EQ(plain, "[read] src/a.c, src/b.c\n[read] src/some/longer.c");
+    free(plain);
+    unsetenv("HAX_DISPLAY_WIDTH");
+}
+
 int main(void)
 {
     cap_init();
@@ -260,5 +299,6 @@ int main(void)
     test_visible_content_shows_preview_not_summary();
     test_selector_overrides_non_collapsed_mode();
     test_hidden_tail_not_displayed_by_fallback();
+    test_collapsed_reads_share_a_row_until_it_is_full();
     T_REPORT();
 }

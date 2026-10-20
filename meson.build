@@ -162,6 +162,7 @@ sources = files(
     'src/system/tempfiles.c',
 
     'src/terminal/clipboard.c',
+    'src/terminal/escape.c',
     'src/terminal/input.c',
     'src/terminal/input_core.c',
     'src/terminal/interrupt.c',

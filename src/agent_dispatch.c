@@ -195,13 +195,11 @@ static void write_tool_header(struct disp *disp, const struct item *call)
     disp_flush(disp);
 }
 
-/* Read headers remain open so later reads can coalesce on the same row. Returns the cells the
- * row occupies. */
-static int write_collapsed_header(struct disp *disp, const struct item *call,
-                                  const struct header_text *text, int row_cells)
+/* Read headers remain open so later reads can coalesce on the same row. */
+static void write_collapsed_header(struct disp *disp, const struct item *call,
+                                   const struct header_text *text, int row_cells)
 {
     const char *name = tool_name(call);
-    int cells = tool_tag_cells(name);
     char *layout = header_text_layout(text, row_cells, row_cells, 1);
 
     disp_write_ansi(disp, theme_open(THEME_CHROME_DIM));
@@ -211,14 +209,11 @@ static int write_collapsed_header(struct disp *disp, const struct item *call,
     disp_write_ansi(disp, ANSI_DIM);
     disp_putc(disp, ' ');
     disp_write(disp, layout, strlen(layout));
-    cells += (int)display_cells(layout);
     disp_write_ansi(disp, ANSI_RESET);
     free(layout);
     write_header_extra(disp, text);
-    cells += header_text_extra_cells(text);
     disp_commit_newlines(disp);
     disp_flush(disp);
-    return cells;
 }
 
 /* Cells a call appended to an open row would occupy. */
@@ -227,7 +222,7 @@ static int coalesced_cells(const struct header_text *text)
     return 2 + (int)display_cells(text->argument) + header_text_extra_cells(text);
 }
 
-static int append_collapsed_argument(struct disp *disp, const struct header_text *text)
+static void append_collapsed_argument(struct disp *disp, const struct header_text *text)
 {
     disp_write_ansi(disp, ANSI_DIM);
     disp_write(disp, ", ", 2);
@@ -237,7 +232,6 @@ static int append_collapsed_argument(struct disp *disp, const struct header_text
     write_header_extra(disp, text);
     disp_commit_newlines(disp);
     disp_flush(disp);
-    return coalesced_cells(text);
 }
 
 void render_tool_call_header(struct render_ctx *render, const struct item *call)
@@ -302,16 +296,16 @@ static void write_cluster_line(struct render_ctx *render, const struct item *cal
     int row_cells = row_budget(terminal_width - tool_tag_cells(tool_name(call)) - 1);
     struct header_text text = header_text_resolve(tool, call, 1, row_cells);
     if (can_coalesce) {
-        if (render->cluster.line_cells + coalesced_cells(&text) > terminal_width - 1) {
+        if ((int)disp->column + coalesced_cells(&text) > terminal_width - 1) {
             close_collapsed_line(disp);
-            render->cluster.line_cells = write_collapsed_header(disp, call, &text, row_cells);
+            write_collapsed_header(disp, call, &text, row_cells);
         } else {
-            render->cluster.line_cells += append_collapsed_argument(disp, &text);
+            append_collapsed_argument(disp, &text);
         }
     } else {
         if (render->cluster.line_open)
             close_collapsed_line(disp);
-        render->cluster.line_cells = write_collapsed_header(disp, call, &text, row_cells);
+        write_collapsed_header(disp, call, &text, row_cells);
         if (!is_read)
             close_collapsed_line(disp);
     }
@@ -343,7 +337,7 @@ static struct item dispatch_tool_call_collapsed(struct render_ctx *render,
     snprintf(label, sizeof(label), "[%s] running...", call->tool_name);
     snprintf(request_key, sizeof(request_key), "run:%s", call->tool_name);
     spinner_request_label(spinner, request_key, label);
-    spinner_park(spinner, is_read ? render->cluster.line_cells : 0);
+    spinner_park(spinner, is_read ? (int)render->disp.column : 0);
     spinner_swap_end(spinner);
 
     struct tool_run_ctx run_ctx = {.image_input = image_input};

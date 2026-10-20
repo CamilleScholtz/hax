@@ -44,7 +44,6 @@ static void close_mode(struct render_ctx *render)
         disp_flush(&render->disp);
         render->cluster.last_tool = NULL;
         render->cluster.line_open = 0;
-        render->cluster.line_cells = 0;
         break;
     }
 }
