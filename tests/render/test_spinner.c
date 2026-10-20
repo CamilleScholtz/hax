@@ -96,11 +96,91 @@ static void test_tool_frame_paints_rows_verbatim(void)
     buf_free(&frame);
 }
 
+static void test_label_set_replaces_at_once(void)
+{
+    struct spinner_label label;
+    spinner_label_init(&label, NULL);
+    EXPECT_STR_EQ(label.text, "working...");
+    spinner_label_request(&label, "thinking", "thinking...", 1000);
+
+    EXPECT(spinner_label_set(&label, "compose", "[bash] composing..."));
+    EXPECT_STR_EQ(label.text, "[bash] composing...");
+    EXPECT(label.pending_key == NULL);
+    spinner_label_settle(&label, 1000 + SPINNER_LABEL_SETTLE_MS);
+    EXPECT_STR_EQ(label.text, "[bash] composing...");
+    EXPECT(!spinner_label_set(&label, "compose", "[bash] composing..."));
+    spinner_label_free(&label);
+}
+
+static void test_label_request_waits_until_stable(void)
+{
+    struct spinner_label label;
+    spinner_label_init(&label, NULL);
+
+    EXPECT(!spinner_label_request(&label, "thinking", "thinking...", 1000));
+    spinner_label_settle(&label, 1000 + SPINNER_LABEL_SETTLE_MS - 1);
+    EXPECT_STR_EQ(label.text, "working...");
+    spinner_label_settle(&label, 1000 + SPINNER_LABEL_SETTLE_MS);
+    EXPECT_STR_EQ(label.text, "thinking...");
+    EXPECT_STR_EQ(label.key, "thinking");
+    spinner_label_free(&label);
+}
+
+static void test_label_repeats_update_text_but_keep_settling_time(void)
+{
+    struct spinner_label label;
+    spinner_label_init(&label, NULL);
+
+    spinner_label_request(&label, "processing", "processing... 10%", 1000);
+    spinner_label_request(&label, "processing", "processing... 50%", 2500);
+    spinner_label_settle(&label, 1000 + SPINNER_LABEL_SETTLE_MS);
+    EXPECT_STR_EQ(label.text, "processing... 50%");
+
+    EXPECT(spinner_label_request(&label, "processing", "processing... 90%", 4000));
+    EXPECT_STR_EQ(label.text, "processing... 90%");
+    spinner_label_free(&label);
+}
+
+static void test_label_churn_returns_to_default(void)
+{
+    struct spinner_label label;
+    spinner_label_init(&label, NULL);
+    spinner_label_set(&label, "thinking", "thinking...");
+
+    /* No candidate stays stable long enough to settle, so the stale label gives way. */
+    spinner_label_request(&label, "a", "a...", 1000);
+    spinner_label_request(&label, "b", "b...", 1500);
+    spinner_label_request(&label, "a", "a...", 2500);
+    spinner_label_settle(&label, 1000 + SPINNER_LABEL_SETTLE_MS - 1);
+    EXPECT_STR_EQ(label.text, "thinking...");
+    spinner_label_settle(&label, 1000 + SPINNER_LABEL_SETTLE_MS);
+    EXPECT_STR_EQ(label.text, "working...");
+    spinner_label_free(&label);
+}
+
+static void test_label_displayed_key_ends_contradiction(void)
+{
+    struct spinner_label label;
+    spinner_label_init(&label, NULL);
+    spinner_label_set(&label, "thinking", "thinking...");
+
+    spinner_label_request(&label, "a", "a...", 1000);
+    spinner_label_request(&label, "thinking", "thinking...", 1500);
+    spinner_label_settle(&label, 1000 + 2 * SPINNER_LABEL_SETTLE_MS);
+    EXPECT_STR_EQ(label.text, "thinking...");
+    spinner_label_free(&label);
+}
+
 int main(void)
 {
     capture_init();
     test_glyph_is_one_braille_codepoint();
     test_spinner_is_null_and_silent_without_tty();
     test_tool_frame_paints_rows_verbatim();
+    test_label_set_replaces_at_once();
+    test_label_request_waits_until_stable();
+    test_label_repeats_update_text_but_keep_settling_time();
+    test_label_churn_returns_to_default();
+    test_label_displayed_key_ends_contradiction();
     T_REPORT();
 }

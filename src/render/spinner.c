@@ -20,7 +20,6 @@
 #include "text/width.h"
 
 #define FRAME_INTERVAL_MS 80
-#define LABEL_SETTLE_MS   2000
 #define TIMER_MIN_MS      30000
 /* An indicator that would be replaced this quickly reads as flicker, not feedback. */
 #define LABEL_SHOW_GRACE_MS 300
@@ -47,14 +46,7 @@ struct spinner {
     enum spinner_mode mode;
     int stop_requested;
 
-    char *displayed_label;
-    char *displayed_key;
-    char *pending_label;
-    char *pending_key;
-    long pending_since_ms;
-    /* The first request contradicting the displayed key. Silence does not contradict a label. */
-    long contradicted_since_ms;
-
+    struct spinner_label label;
     long timer_started_at_ms;
     int parked_rows;
     int origin_col;
@@ -106,7 +98,7 @@ static void draw_label_row_locked(struct spinner *spinner, const char *glyph)
             char duration[32];
             format_duration_steady(duration, sizeof(duration), elapsed_ms);
             size_t prefix_cells = strlen(duration) + 3; /* spaces and middle dot */
-            if (prefix_cells + display_cells(spinner->displayed_label) <= (size_t)label_budget) {
+            if (prefix_cells + display_cells(spinner->label.text) <= (size_t)label_budget) {
                 fputs(duration, stdout);
                 fputs(" \xC2\xB7 ", stdout);
                 label_budget -= (int)prefix_cells;
@@ -114,7 +106,7 @@ static void draw_label_row_locked(struct spinner *spinner, const char *glyph)
         }
     }
 
-    char *label = truncate_for_display(spinner->displayed_label, (size_t)label_budget);
+    char *label = truncate_for_display(spinner->label.text, (size_t)label_budget);
     fputs(label, stdout);
     free(label);
     finish_row_repaint();
@@ -186,52 +178,103 @@ static void draw_frame_locked(struct spinner *spinner)
     }
 }
 
-static void clear_pending_label_locked(struct spinner *spinner)
+void spinner_label_init(struct spinner_label *label, const char *text)
 {
-    free(spinner->pending_label);
-    free(spinner->pending_key);
-    spinner->pending_label = NULL;
-    spinner->pending_key = NULL;
+    memset(label, 0, sizeof(*label));
+    label->text = xstrdup(text && *text ? text : DEFAULT_LABEL);
+    label->key = xstrdup(DEFAULT_LABEL_KEY);
 }
 
-static int set_displayed_label_locked(struct spinner *spinner, const char *key, const char *label)
+static void clear_pending(struct spinner_label *label)
 {
-    if (strcmp(spinner->displayed_key, key) != 0) {
-        free(spinner->displayed_key);
-        spinner->displayed_key = xstrdup(key);
+    free(label->pending_text);
+    free(label->pending_key);
+    label->pending_text = NULL;
+    label->pending_key = NULL;
+}
+
+void spinner_label_free(struct spinner_label *label)
+{
+    clear_pending(label);
+    free(label->text);
+    free(label->key);
+    label->text = NULL;
+    label->key = NULL;
+}
+
+static int display(struct spinner_label *label, const char *key, const char *text)
+{
+    if (strcmp(label->key, key) != 0) {
+        free(label->key);
+        label->key = xstrdup(key);
     }
-    if (strcmp(spinner->displayed_label, label) == 0)
+    if (strcmp(label->text, text) == 0)
         return 0;
 
-    free(spinner->displayed_label);
-    spinner->displayed_label = xstrdup(label);
+    free(label->text);
+    label->text = xstrdup(text);
     return 1;
 }
 
-/* A stable candidate replaces the displayed state. Sustained churn instead clears a stale claim. */
-static void settle_label_locked(struct spinner *spinner)
+int spinner_label_set(struct spinner_label *label, const char *key, const char *text)
 {
-    long now_ms = monotonic_ms();
-    if (spinner->pending_key && now_ms - spinner->pending_since_ms >= LABEL_SETTLE_MS) {
-        free(spinner->displayed_label);
-        free(spinner->displayed_key);
-        spinner->displayed_label = spinner->pending_label;
-        spinner->displayed_key = spinner->pending_key;
-        spinner->pending_label = NULL;
-        spinner->pending_key = NULL;
-        spinner->contradicted_since_ms = 0;
+    clear_pending(label);
+    label->contradicted_since_ms = 0;
+    return display(label, key && *key ? key : DEFAULT_LABEL_KEY,
+                   text && *text ? text : DEFAULT_LABEL);
+}
+
+int spinner_label_request(struct spinner_label *label, const char *key, const char *text,
+                          long now_ms)
+{
+    const char *requested_key = key && *key ? key : DEFAULT_LABEL_KEY;
+    const char *requested_text = text && *text ? text : DEFAULT_LABEL;
+
+    if (strcmp(label->key, requested_key) == 0) {
+        clear_pending(label);
+        label->contradicted_since_ms = 0;
+        return display(label, requested_key, requested_text);
+    }
+    if (label->pending_key && strcmp(label->pending_key, requested_key) == 0) {
+        if (strcmp(label->pending_text, requested_text) != 0) {
+            free(label->pending_text);
+            label->pending_text = xstrdup(requested_text);
+        }
+        return 0;
+    }
+
+    clear_pending(label);
+    label->pending_text = xstrdup(requested_text);
+    label->pending_key = xstrdup(requested_key);
+    label->pending_since_ms = now_ms;
+    /* Keep the first contradiction time across changing candidates so churn can demote. */
+    if (!label->contradicted_since_ms)
+        label->contradicted_since_ms = now_ms;
+    return 0;
+}
+
+void spinner_label_settle(struct spinner_label *label, long now_ms)
+{
+    if (label->pending_key && now_ms - label->pending_since_ms >= SPINNER_LABEL_SETTLE_MS) {
+        free(label->text);
+        free(label->key);
+        label->text = label->pending_text;
+        label->key = label->pending_key;
+        label->pending_text = NULL;
+        label->pending_key = NULL;
+        label->contradicted_since_ms = 0;
         return;
     }
 
-    if (!spinner->contradicted_since_ms ||
-        now_ms - spinner->contradicted_since_ms < LABEL_SETTLE_MS ||
-        strcmp(spinner->displayed_key, DEFAULT_LABEL_KEY) == 0)
+    if (!label->contradicted_since_ms ||
+        now_ms - label->contradicted_since_ms < SPINNER_LABEL_SETTLE_MS ||
+        strcmp(label->key, DEFAULT_LABEL_KEY) == 0)
         return;
 
-    set_displayed_label_locked(spinner, DEFAULT_LABEL_KEY, DEFAULT_LABEL);
-    spinner->contradicted_since_ms = 0;
-    if (spinner->pending_key && strcmp(spinner->pending_key, DEFAULT_LABEL_KEY) == 0)
-        clear_pending_label_locked(spinner);
+    display(label, DEFAULT_LABEL_KEY, DEFAULT_LABEL);
+    label->contradicted_since_ms = 0;
+    if (label->pending_key && strcmp(label->pending_key, DEFAULT_LABEL_KEY) == 0)
+        clear_pending(label);
 }
 
 static void erase_locked(struct spinner *spinner)
@@ -261,7 +304,7 @@ static void show_locked(struct spinner *spinner, enum spinner_mode mode, int par
                         int origin_col)
 {
     spinner->label_show_pending = 0;
-    settle_label_locked(spinner);
+    spinner_label_settle(&spinner->label, monotonic_ms());
     if (spinner->mode == mode && spinner->parked_rows == parked_rows &&
         spinner->origin_col == origin_col)
         return;
@@ -381,13 +424,8 @@ void spinner_set_label(struct spinner *spinner, const char *key, const char *lab
     if (!spinner)
         return;
 
-    const char *new_key = key && *key ? key : DEFAULT_LABEL_KEY;
-    const char *new_label = label && *label ? label : DEFAULT_LABEL;
     pthread_mutex_lock(&spinner->mutex);
-    clear_pending_label_locked(spinner);
-    spinner->contradicted_since_ms = 0;
-    int label_changed = set_displayed_label_locked(spinner, new_key, new_label);
-    if (label_changed && spinner->mode == SPINNER_LABEL)
+    if (spinner_label_set(&spinner->label, key, label) && spinner->mode == SPINNER_LABEL)
         draw_frame_locked(spinner);
     pthread_mutex_unlock(&spinner->mutex);
 }
@@ -397,31 +435,10 @@ void spinner_request_label(struct spinner *spinner, const char *key, const char 
     if (!spinner)
         return;
 
-    const char *requested_key = key && *key ? key : DEFAULT_LABEL_KEY;
-    const char *requested_label = label && *label ? label : DEFAULT_LABEL;
     pthread_mutex_lock(&spinner->mutex);
-
-    if (strcmp(spinner->displayed_key, requested_key) == 0) {
-        clear_pending_label_locked(spinner);
-        spinner->contradicted_since_ms = 0;
-        int label_changed = set_displayed_label_locked(spinner, requested_key, requested_label);
-        if (label_changed && spinner->mode == SPINNER_LABEL)
-            draw_frame_locked(spinner);
-    } else if (spinner->pending_key && strcmp(spinner->pending_key, requested_key) == 0) {
-        if (strcmp(spinner->pending_label, requested_label) != 0) {
-            free(spinner->pending_label);
-            spinner->pending_label = xstrdup(requested_label);
-        }
-    } else {
-        clear_pending_label_locked(spinner);
-        spinner->pending_label = xstrdup(requested_label);
-        spinner->pending_key = xstrdup(requested_key);
-        spinner->pending_since_ms = monotonic_ms();
-        /* Keep the first contradiction time across changing candidates so churn can demote. */
-        if (!spinner->contradicted_since_ms)
-            spinner->contradicted_since_ms = spinner->pending_since_ms;
-    }
-
+    if (spinner_label_request(&spinner->label, key, label, monotonic_ms()) &&
+        spinner->mode == SPINNER_LABEL)
+        draw_frame_locked(spinner);
     pthread_mutex_unlock(&spinner->mutex);
 }
 
@@ -529,7 +546,7 @@ static void *spinner_thread(void *arg)
             continue;
         }
 
-        settle_label_locked(spinner);
+        spinner_label_settle(&spinner->label, monotonic_ms());
         draw_frame_locked(spinner);
         struct timespec deadline = deadline_after_ms(FRAME_INTERVAL_MS);
         pthread_cond_timedwait(&spinner->wake, &spinner->mutex, &deadline);
@@ -544,16 +561,14 @@ struct spinner *spinner_new(const char *label)
         return NULL;
 
     struct spinner *spinner = xcalloc(1, sizeof(*spinner));
-    spinner->displayed_label = xstrdup(label && *label ? label : DEFAULT_LABEL);
-    spinner->displayed_key = xstrdup(DEFAULT_LABEL_KEY);
+    spinner_label_init(&spinner->label, label);
     pthread_mutex_init(&spinner->mutex, NULL);
     pthread_cond_init(&spinner->wake, NULL);
 
     if (pthread_create(&spinner->thread, NULL, spinner_thread, spinner) != 0) {
         pthread_mutex_destroy(&spinner->mutex);
         pthread_cond_destroy(&spinner->wake);
-        free(spinner->displayed_label);
-        free(spinner->displayed_key);
+        spinner_label_free(&spinner->label);
         free(spinner);
         return NULL;
     }
@@ -579,10 +594,7 @@ void spinner_free(struct spinner *spinner)
     pthread_join(spinner->thread, NULL);
     pthread_mutex_destroy(&spinner->mutex);
     pthread_cond_destroy(&spinner->wake);
-    free(spinner->displayed_label);
-    free(spinner->displayed_key);
-    free(spinner->pending_label);
-    free(spinner->pending_key);
+    spinner_label_free(&spinner->label);
     live_region_free(&spinner->tool_region);
     free(spinner);
 }

@@ -53,14 +53,9 @@ void spinner_swap_begin(struct spinner *spinner);
 /* End the swap's synchronized output. Emits nothing when no swap is open. */
 void spinner_swap_end(struct spinner *spinner);
 
-/* Immediately replace the labeled spinner's state and discard any deferred request. key identifies
- * a logical state independently of its display text. NULL or empty values select the "working" and
- * "working..." defaults. Inputs are copied. */
+/* Change the label as spinner_label_set() and spinner_label_request(), repainting a visible
+ * labeled spinner when its text changes. */
 void spinner_set_label(struct spinner *spinner, const char *key, const char *label);
-
-/* Request a label change with hysteresis. A new key is displayed only after remaining stable; churn
- * instead returns the display to "working...". Repeating the displayed key updates its text
- * immediately, while repeating a pending key preserves its settling time. Inputs are copied. */
 void spinner_request_label(struct spinner *spinner, const char *key, const char *label);
 
 /* Set the labeled spinner's elapsed-time origin to a positive monotonic_ms() value, or disable the
@@ -69,6 +64,42 @@ void spinner_set_timer(struct spinner *spinner, long started_at_ms);
 
 /* Return a borrowed, NUL-terminated one-cell UTF-8 glyph selected from monotonic time. */
 const char *spinner_glyph_now(void);
+
+/* How long a requested label must stay stable before it is displayed. */
+#define SPINNER_LABEL_SETTLE_MS 2000
+
+/* The label's displayed text, with hysteresis for requested changes. A key names a logical state
+ * independently of its display text, and NULL or empty values select the "working" and
+ * "working..." defaults. Strings are owned copies. Not thread-safe; initialize with
+ * spinner_label_init(). */
+struct spinner_label {
+    char *text;
+    char *key;
+    char *pending_text; /* NULL when no request is pending */
+    char *pending_key;
+    long pending_since_ms;
+    /* When requests began contradicting the displayed key, or 0. Silence contradicts nothing. */
+    long contradicted_since_ms;
+};
+
+/* Display text under the default key. */
+void spinner_label_init(struct spinner_label *label, const char *text);
+void spinner_label_free(struct spinner_label *label);
+
+/* Replace the displayed state at once and discard any pending request. Returns whether the
+ * displayed text changed. */
+int spinner_label_set(struct spinner_label *label, const char *key, const char *text);
+
+/* Request a change at now_ms. Repeating the displayed key updates its text at once, and repeating
+ * the pending key updates its text but keeps its settling time; any other key becomes pending.
+ * Returns whether the displayed text changed. */
+int spinner_label_request(struct spinner_label *label, const char *key, const char *text,
+                          long now_ms);
+
+/* Display a pending key that has stayed stable for SPINNER_LABEL_SETTLE_MS by now_ms. Requests
+ * that keep contradicting the displayed key that long without one settling return the display to
+ * "working...". */
+void spinner_label_settle(struct spinner_label *label, long now_ms);
 
 struct buf;
 struct live_region;
