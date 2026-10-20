@@ -7,6 +7,7 @@
 
 #include "xalloc.h"
 #include "terminal/input.h"
+#include "terminal/live_region.h"
 #include "text/display_safe.h"
 #include "text/trim.h"
 #include "text/utf8.h"
@@ -35,6 +36,7 @@ void input_free(struct input *in)
     free(in->preseed);
     free(in->empty_placeholder);
     free(in->candidates);
+    live_region_free(&in->region);
     free(in);
 }
 

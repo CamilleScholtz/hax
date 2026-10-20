@@ -13,6 +13,7 @@
 #include "xalloc.h"
 #include "system/clock.h"
 #include "terminal/ansi.h"
+#include "terminal/live_region.h"
 #include "terminal/theme.h"
 #include "terminal/width.h"
 #include "text/fmt.h"
@@ -69,7 +70,7 @@ struct spinner {
     int tool_view_cells[SPINNER_TOOL_VIEW_ROWS_MAX];
     int tool_view_count;
     int tool_view_dirty;
-    struct spinner_tool_frame painted_frame;
+    struct live_region tool_region;
 };
 
 const char *spinner_glyph_now(void)
@@ -119,43 +120,20 @@ static void draw_label_row_locked(struct spinner *spinner, const char *glyph)
     finish_row_repaint();
 }
 
-/* The animated gutter overprints the row's first cell, so it must follow the row's erase. */
-static void append_glyph_overprint(struct buf *out, const char *glyph)
-{
-    buf_append_str(out, "\r");
-    buf_append_str(out, theme_open(THEME_CHROME_DIM));
-    buf_append_str(out, glyph);
-    buf_append_str(out, ANSI_RESET);
-}
-
-void spinner_build_tool_frame(struct buf *frame, const struct spinner_row *rows, int row_count,
-                              const char *glyph, int terminal_cols,
-                              const struct spinner_tool_frame *previous,
-                              struct spinner_tool_frame *painted)
+void spinner_build_tool_frame(struct buf *frame, struct live_region *region,
+                              const struct spinner_row *rows, int row_count, const char *glyph,
+                              int terminal_cols)
 {
     buf_append_str(frame, ANSI_SYNC_BEGIN);
-    if (previous) {
-        /* The previous glyph overprint left the cursor on the last logical row's first physical
-         * row, so only preceding rows contribute to the climb even after a resize rewrap. */
-        int climb =
-            reflow_physical_rows(previous->row_widths, previous->row_count - 1, terminal_cols);
-        if (climb > 0) {
-            char cursor_up[16];
-            snprintf(cursor_up, sizeof(cursor_up), ANSI_CSI "%dA", climb);
-            buf_append_str(frame, cursor_up);
-        }
-    }
-    buf_append_str(frame, "\r");
-
-    painted->row_count = 0;
-    for (int row = 0; row < row_count; row++) {
-        int last = row == row_count - 1;
-        buf_append_str(frame, rows[row].bytes);
-        if (painted->row_count < SPINNER_TOOL_VIEW_ROWS_MAX)
-            painted->row_widths[painted->row_count++] = rows[row].cells;
-        buf_append_str(frame, last ? ANSI_ERASE_BELOW : ANSI_ERASE_LINE "\r\n");
-    }
-    append_glyph_overprint(frame, glyph);
+    live_region_rewind(region, frame, terminal_cols);
+    for (int row = 0; row < row_count; row++)
+        live_region_add_row(region, frame, rows[row].bytes, strlen(rows[row].bytes),
+                            rows[row].cells);
+    /* The animated gutter overprints the last row's first cell, so it must follow the erase. */
+    live_region_end_frame(region, frame, row_count - 1, 0);
+    buf_append_str(frame, theme_open(THEME_CHROME_DIM));
+    buf_append_str(frame, glyph);
+    buf_append_str(frame, ANSI_RESET);
     buf_append_str(frame, ANSI_SYNC_END);
 }
 
@@ -171,7 +149,7 @@ static void draw_glyph_only_locked(const char *glyph)
 
 static void draw_tool_view_locked(struct spinner *spinner, const char *glyph)
 {
-    if (!spinner->tool_view_dirty && spinner->painted_frame.row_count > 0) {
+    if (!spinner->tool_view_dirty && spinner->tool_region.row_count > 0) {
         draw_glyph_only_locked(glyph);
         return;
     }
@@ -184,13 +162,10 @@ static void draw_tool_view_locked(struct spinner *spinner, const char *glyph)
 
     struct buf frame;
     buf_init(&frame);
-    struct spinner_tool_frame painted;
-    spinner_build_tool_frame(&frame, rows, spinner->tool_view_count, glyph, term_width(),
-                             spinner->painted_frame.row_count > 0 ? &spinner->painted_frame : NULL,
-                             &painted);
+    spinner_build_tool_frame(&frame, &spinner->tool_region, rows, spinner->tool_view_count, glyph,
+                             term_width());
     fwrite(frame.data ? frame.data : "", 1, frame.len, stdout);
     fflush(stdout);
-    spinner->painted_frame = painted;
     spinner->tool_view_dirty = 0;
     buf_free(&frame);
 }
@@ -261,26 +236,15 @@ static void settle_label_locked(struct spinner *spinner)
 
 static void erase_locked(struct spinner *spinner)
 {
-    if (spinner->painted_frame.row_count > 0) {
-        /* Recompute under the current width so a resize between paint and erase still clears
-         * every row. The cursor rests on the last logical row's first physical row, so only
-         * preceding rows contribute to the climb. */
-        int terminal_cols = term_width();
-        int climb = reflow_physical_rows(spinner->painted_frame.row_widths,
-                                         spinner->painted_frame.row_count - 1, terminal_cols);
-        int last_row_wraps =
-            spinner->painted_frame.row_widths[spinner->painted_frame.row_count - 1] > terminal_cols;
-        fputs("\r", stdout);
-        if (climb > 0)
-            fprintf(stdout, "\x1b[%dA", climb);
-        /* Erase-below only for multi-row extents: its screen-wide damage makes multiplexers
-         * repaint far more than the region. */
-        if (climb > 0 || last_row_wraps)
-            fputs(ANSI_ERASE_BELOW, stdout);
-        else
-            fputs(ANSI_ERASE_LINE, stdout);
-        spinner->painted_frame.row_count = 0;
+    if (spinner->tool_region.row_count > 0) {
+        /* Erase under the current width so a resize between paint and erase still clears every
+         * row. */
+        struct buf erase;
+        buf_init(&erase);
+        live_region_erase(&spinner->tool_region, &erase, term_width());
+        fwrite(erase.data, 1, erase.len, stdout);
         fflush(stdout);
+        buf_free(&erase);
         return;
     }
 
@@ -619,5 +583,6 @@ void spinner_free(struct spinner *spinner)
     free(spinner->displayed_key);
     free(spinner->pending_label);
     free(spinner->pending_key);
+    live_region_free(&spinner->tool_region);
     free(spinner);
 }

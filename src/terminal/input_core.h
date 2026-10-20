@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <termios.h>
 
+#include "terminal/live_region.h"
+
 /* Shared editor state and terminal-independent operations. */
 
 /* `match` performs no I/O and returns the replacement span [start, end). `complete` receives the
@@ -44,16 +46,14 @@ struct input {
      * same line must still reach the file. */
     int hist_newest_unpersisted;
 
-    /* Screen-relative state for repainting the visible edit area. */
-    int painted_cursor_row;
-    int painted_rows;
-    int previous_paint_clipped;
+    /* The visible edit area: clip indicators included, and the cursor resting at the caret. */
+    struct live_region region;
     int window_top;
-    int top_indicator_width;
     int ghost_painted; /* the last paint drew ghost text after the buffer */
 
     int continuation_at_column_zero;
-    const char *prompt; /* borrowed for the duration of input_readline */
+    const char *prompt;   /* borrowed for the duration of input_readline */
+    int terminal_columns; /* 0 when unknown */
     int display_columns;
     int terminal_rows; /* 0 disables viewport clipping */
 

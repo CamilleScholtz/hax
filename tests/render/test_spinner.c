@@ -10,6 +10,7 @@
 #include "render/spinner.h"
 #include "system/locale.h"
 #include "terminal/ansi.h"
+#include "terminal/live_region.h"
 
 #define BRAILLE_PREFIX "\xE2\xA0"
 
@@ -79,61 +80,20 @@ static void test_tool_frame_paints_rows_verbatim(void)
 {
     struct buf frame;
     buf_init(&frame);
-    struct spinner_tool_frame painted;
+    struct live_region region = {0};
     struct spinner_row rows[] = {{.bytes = "<older>", .cells = 7},
                                  {.bytes = "<newest>", .cells = 8}};
 
-    spinner_build_tool_frame(&frame, rows, 2, "*", 80, NULL, &painted);
+    spinner_build_tool_frame(&frame, &region, rows, 2, "*", 80);
     EXPECT_STR_EQ(frame.data, ANSI_SYNC_BEGIN "\r"
                                               "<older>" ANSI_ERASE_LINE "\r\n"
                                               "<newest>" ANSI_ERASE_BELOW "\r" FRAME_CHROME
                                               "*" ANSI_RESET ANSI_SYNC_END);
-    EXPECT(painted.row_count == 2);
-    EXPECT(painted.row_widths[0] == 7);
-    EXPECT(painted.row_widths[1] == 8);
+    EXPECT(region.row_count == 2);
+    EXPECT(region.cursor_row == 1);
+    EXPECT(region.cursor_col == 0);
+    live_region_free(&region);
     buf_free(&frame);
-}
-
-static void test_tool_frame_climb_accounts_for_reflow(void)
-{
-    struct buf frame;
-    buf_init(&frame);
-    struct spinner_tool_frame painted;
-    struct spinner_tool_frame previous = {.row_widths = {100, 10}, .row_count = 2};
-    struct spinner_row rows[] = {{.bytes = "a", .cells = 3}};
-
-    /* The 100-cell row wraps to three physical rows at 40 columns. */
-    spinner_build_tool_frame(&frame, rows, 1, "*", 40, &previous, &painted);
-    EXPECT(strstr(frame.data, "\x1b[3A") != NULL);
-    EXPECT(painted.row_count == 1);
-    EXPECT(painted.row_widths[0] == 3);
-    buf_free(&frame);
-}
-
-/* The cursor rests on the last logical row's first physical row, so a wrapped last row must not
- * contribute to the climb; over-climbing would erase settled output above the live block. */
-static void test_tool_frame_climb_excludes_wrapped_last_row(void)
-{
-    struct buf frame;
-    buf_init(&frame);
-    struct spinner_tool_frame painted;
-    struct spinner_tool_frame previous = {.row_widths = {100, 90}, .row_count = 2};
-    struct spinner_row rows[] = {{.bytes = "a", .cells = 3}};
-
-    /* Only the preceding 100-cell row (three physical rows at 40 columns) is climbed; the
-     * wrapped 90-cell last row lies below the cursor. */
-    spinner_build_tool_frame(&frame, rows, 1, "*", 40, &previous, &painted);
-    EXPECT(strstr(frame.data, "\x1b[3A") != NULL);
-    EXPECT(strstr(frame.data, "\x1b[5A") == NULL);
-    buf_free(&frame);
-
-    /* A lone wrapped row needs no climb at all; nothing else in the frame emits cursor-up. */
-    struct buf solo;
-    buf_init(&solo);
-    struct spinner_tool_frame previous_solo = {.row_widths = {100}, .row_count = 1};
-    spinner_build_tool_frame(&solo, rows, 1, "*", 40, &previous_solo, &painted);
-    EXPECT(strchr(solo.data, 'A') == NULL);
-    buf_free(&solo);
 }
 
 int main(void)
@@ -142,7 +102,5 @@ int main(void)
     test_glyph_is_one_braille_codepoint();
     test_spinner_is_null_and_silent_without_tty();
     test_tool_frame_paints_rows_verbatim();
-    test_tool_frame_climb_accounts_for_reflow();
-    test_tool_frame_climb_excludes_wrapped_last_row();
     T_REPORT();
 }

@@ -70,21 +70,15 @@ void spinner_set_timer(struct spinner *spinner, long started_at_ms);
 /* Return a borrowed, NUL-terminated one-cell UTF-8 glyph selected from monotonic time. */
 const char *spinner_glyph_now(void);
 
-/* Cell widths of the physical rows painted by one tool-view frame, for reflow-aware repaints. */
-struct spinner_tool_frame {
-    int row_widths[SPINNER_TOOL_VIEW_ROWS_MAX];
-    int row_count;
-};
-
 struct buf;
+struct live_region;
 
-/* Append one synchronized tool-view repaint frame: climb over the previous frame (NULL on first
- * paint), then overprint every row before erasing stale tails, so terminals without synchronized
- * output never show a blank frame. Rows are painted verbatim with the glyph overprinting the last
- * row's first cell; their widths are recorded in painted. Pure with respect to the terminal. */
-void spinner_build_tool_frame(struct buf *frame, const struct spinner_row *rows, int row_count,
-                              const char *glyph, int terminal_cols,
-                              const struct spinner_tool_frame *previous,
-                              struct spinner_tool_frame *painted);
+/* Append one synchronized tool-view repaint of region: overprint every row before erasing stale
+ * tails, so terminals without synchronized output never show a blank frame. Rows are painted
+ * verbatim with the glyph overprinting the last row's first cell. Pure with respect to the
+ * terminal. */
+void spinner_build_tool_frame(struct buf *frame, struct live_region *region,
+                              const struct spinner_row *rows, int row_count, const char *glyph,
+                              int terminal_cols);
 
 #endif /* HAX_RENDER_SPINNER_H */

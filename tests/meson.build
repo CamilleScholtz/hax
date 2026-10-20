@@ -111,6 +111,7 @@ test_sources = [
     'terminal/test_input.c',
     'terminal/test_input_core.c',
     'terminal/test_interrupt.c',
+    'terminal/test_live_region.c',
     'terminal/test_picker_core.c',
     'terminal/test_theme.c',
     'terminal/test_vt_resolve.c',
@@ -178,6 +179,7 @@ e2e_scenarios = [
     'oneshot',
     'repl_complete',
     'repl_interrupt',
+    'repl_resize',
     'repl_smoke',
 ]
 
