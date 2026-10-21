@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """The status row while a turn is in progress. It stays up as output streams, one blank row below
-what has been written, and repainting it leaves that output as it was. What its label says is in
-test_repl_status_label.py."""
-
-import os
+what has been written, and repainting it leaves that output as it was. Tool calls are in
+test_repl_status_tools.py, and what its label says is in test_repl_status_label.py."""
 
 import harness
 
@@ -89,60 +87,6 @@ def test_output_keeps_its_style_across_chunks():
     )
     harness.expect(
         "\x1b[2;3mFirst thought, then a second." in screen, "reasoning stays dim and italic"
-    )
-
-
-def test_stays_up_while_a_collapsed_tool_runs():
-    """A quiet tool still shows that the turn is busy while it runs."""
-    term = harness.Terminal(
-        """
-        tool bash {"command":"cat fifo"}
-        end-turn
-        """
-    )
-    os.mkfifo(term.workdir / "fifo")
-    term.wait_for("❯")
-    term.type("go")
-    term.send("Enter")
-    term.expect_screen(
-        """
-        ▌ hax › mock · mock-model
-        ▌ ctrl-d quit · try /help
-
-        ▌ go
-
-        [bash] cat fifo
-
-        {*}...
-        """
-    )
-
-
-def test_stays_below_a_running_tools_output():
-    """A verbose tool's output stays open, with no closing corner, above the status row."""
-    term = harness.Terminal(
-        """
-        tool bash {"command":"printf 'one\\\\ntwo\\\\n'; read -r line < fifo"}
-        end-turn
-        """
-    )
-    os.mkfifo(term.workdir / "fifo")
-    term.wait_for("❯")
-    term.type("go")
-    term.send("Enter")
-    term.expect_screen(
-        """
-        ▌ hax › mock · mock-model
-        ▌ ctrl-d quit · try /help
-
-        ▌ go
-
-        [bash] printf 'one\\ntwo\\n'; read -r line < fifo
-        ┌ one
-        ╵ two
-
-        {*}...
-        """
     )
 
 

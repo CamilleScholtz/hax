@@ -15,6 +15,7 @@ enum render_mode {
     RENDER_REASONING,
     RENDER_TEXT,
     RENDER_TOOL_CLUSTER, /* collapsed tool calls; persists across stream boundaries */
+    RENDER_TOOL,         /* a verbose tool call, which draws its own block */
 };
 
 /* Live terminal rendering state. The context does not own footer or md. */

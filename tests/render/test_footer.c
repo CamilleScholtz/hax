@@ -56,11 +56,8 @@ static void test_footer_is_null_and_silent_without_tty(void)
     footer_set_label(footer, "thinking", "thinking...");
     footer_request_label(footer, "reading", "reading...");
     footer_set_timer(footer, 1);
-    footer_park(footer, 4);
     struct footer_row row = {.bytes = "| live output", .cells = 13};
     footer_set_rows(footer, &row, 1);
-    footer_swap_begin(footer);
-    footer_swap_end(footer);
     footer_hide(footer);
     footer_free(footer);
     EXPECT_STR_EQ(capture_read(), "");

@@ -37,17 +37,12 @@ struct footer {
 
     struct spinner_label label;
     long timer_started_at_ms;
-    /* Rows from where output ends to the footer, and its column when unattached. */
-    int parked_rows;
-    int origin_col;
+    int parked_rows; /* from where output ends to the footer */
     int parked_cols; /* the terminal width when the footer moved below the output */
-    /* A swap bracket opened by footer_swap_begin() and not yet closed. */
-    int swap_open;
     /* A deferred status show waiting out its grace period on the animation thread. */
     int status_show_pending;
     long status_show_at_ms;
     int pending_parked_rows;
-    int pending_origin_col;
     /* Prepared rows, newest last, painted above a blank row and the status row. */
     char *row_bytes[FOOTER_ROWS_MAX];
     int row_cells[FOOTER_ROWS_MAX];
@@ -147,8 +142,6 @@ static void draw_frame_locked(struct footer *footer)
     buf_free(&status);
 }
 
-/* Erase under the current width so a resize between paint and erase still clears every row, then
- * return to the cursor footer_park() saved. */
 int footer_build_return(struct buf *out, const struct disp *disp, int gap_rows, int parked_cols,
                         int terminal_cols)
 {
@@ -180,20 +173,11 @@ static void erase_locked(struct footer *footer)
     struct buf erase;
     buf_init(&erase);
     live_region_erase(&footer->region, &erase, term_width());
-    if (footer->disp) {
-        /* Worked out now: a resize since painting rewraps the output. */
-        if (footer_build_return(&erase, footer->disp, footer->parked_rows, footer->parked_cols,
-                                term_width()))
-            disp_note_row_break(footer->disp);
-    } else if (footer->parked_rows > 0) {
-        char restore[32];
-        snprintf(restore, sizeof(restore), ANSI_CSI "%dA", footer->parked_rows);
-        buf_append_str(&erase, restore);
-        if (footer->origin_col > 0) {
-            snprintf(restore, sizeof(restore), ANSI_CSI "%dG", footer->origin_col + 1);
-            buf_append_str(&erase, restore);
-        }
-    }
+    /* Worked out now: a resize since painting rewraps the output. Unattached, the footer was
+     * painted where the cursor was, and the erase leaves it there. */
+    if (footer->disp && footer_build_return(&erase, footer->disp, footer->parked_rows,
+                                            footer->parked_cols, term_width()))
+        disp_note_row_break(footer->disp);
     write_frame_locked(&erase);
     buf_free(&erase);
     /* Frames end in a reset, so output written next would lose the styling it had open. */
@@ -201,6 +185,12 @@ static void erase_locked(struct footer *footer)
         sgr_emit(&footer->disp->style, stdout);
         fflush(stdout);
     }
+}
+
+/* Prepared rows continue the output, starting on the row after it. */
+static int rows_gap(const struct disp *disp)
+{
+    return disp->column > 0 ? 1 : 0;
 }
 
 /* Move from where output ends to the footer's first row. */
@@ -212,8 +202,7 @@ static void park_locked(struct footer *footer, int rows)
         fputc('\n', stdout);
 }
 
-static void show_locked(struct footer *footer, enum footer_mode mode, int parked_rows,
-                        int origin_col)
+static void show_locked(struct footer *footer, enum footer_mode mode, int parked_rows)
 {
     footer->status_show_pending = 0;
     spinner_label_settle(&footer->label, monotonic_ms());
@@ -221,12 +210,11 @@ static void show_locked(struct footer *footer, enum footer_mode mode, int parked
         footer->mode = mode;
         return;
     }
-    if (footer->mode == mode && footer->parked_rows == parked_rows &&
-        footer->origin_col == origin_col)
+    if (footer->mode == mode && footer->parked_rows == parked_rows)
         return;
 
     /* A transition erases one indicator before painting the next; synchronized output keeps the
-     * swap from rendering as a blank-and-repaint. */
+     * change from rendering as a blank-and-repaint. */
     enum footer_mode previous_mode = footer->mode;
     int synced = previous_mode != FOOTER_HIDDEN;
     if (synced) {
@@ -235,7 +223,6 @@ static void show_locked(struct footer *footer, enum footer_mode mode, int parked
     }
 
     footer->mode = mode;
-    footer->origin_col = origin_col;
     park_locked(footer, parked_rows);
     draw_frame_locked(footer);
     if (synced) {
@@ -248,23 +235,21 @@ static void show_locked(struct footer *footer, enum footer_mode mode, int parked
 }
 
 /* A first appearance from hidden waits out a grace period on the animation thread, so a status
- * whose wait ends quickly never blinks. Transitions from a visible mode stay immediate, and so does
- * a show inside an open swap bracket: there the erase and this repaint land in one synchronized
- * frame, while deferring would end the bracket with the indicator erased. */
-static void request_status_show_locked(struct footer *footer, int parked_rows, int origin_col)
+ * whose wait ends quickly never blinks. Transitions from a visible mode stay immediate. */
+static void request_status_show_locked(struct footer *footer, int parked_rows)
 {
-    if (footer->mode != FOOTER_HIDDEN || footer->swap_open) {
-        show_locked(footer, FOOTER_STATUS, parked_rows, origin_col);
+    if (footer->mode != FOOTER_HIDDEN) {
+        show_locked(footer, FOOTER_STATUS, parked_rows);
         return;
     }
     footer->status_show_pending = 1;
     footer->status_show_at_ms = monotonic_ms() + STATUS_SHOW_GRACE_MS;
     footer->pending_parked_rows = parked_rows;
-    footer->pending_origin_col = origin_col;
     pthread_cond_signal(&footer->wake);
 }
 
-/* An open batch of output would keep the footer erased. */
+/* A change made while output is stepping around the footer is only recorded; closing the batch
+ * paints it, in the same synchronized frame as the output. */
 static void finish_output(struct footer *footer)
 {
     if (footer->disp)
@@ -276,26 +261,10 @@ void footer_show(struct footer *footer)
     if (!footer)
         return;
 
-    finish_output(footer);
     pthread_mutex_lock(&footer->mutex);
-    if (footer->disp)
-        request_status_show_locked(footer, footer_status_gap(footer->disp), 0);
-    else
-        request_status_show_locked(footer, 0, 0);
+    request_status_show_locked(footer, footer->disp ? footer_status_gap(footer->disp) : 0);
     pthread_mutex_unlock(&footer->mutex);
-}
-
-void footer_park(struct footer *footer, int cursor_col)
-{
-    if (!footer)
-        return;
-
     finish_output(footer);
-    pthread_mutex_lock(&footer->mutex);
-    /* At column zero the current empty row is the gap; an open line needs another row. */
-    int parked_rows = cursor_col > 0 ? 2 : 1;
-    request_status_show_locked(footer, parked_rows, cursor_col > 0 ? cursor_col : 0);
-    pthread_mutex_unlock(&footer->mutex);
 }
 
 static void free_rows_locked(struct footer *footer)
@@ -329,7 +298,6 @@ void footer_set_rows(struct footer *footer, const struct footer_row *rows, int c
         count = FOOTER_ROWS_MAX;
     }
 
-    finish_output(footer);
     pthread_mutex_lock(&footer->mutex);
     if (!rows_equal_locked(footer, rows, count)) {
         free_rows_locked(footer);
@@ -339,8 +307,9 @@ void footer_set_rows(struct footer *footer, const struct footer_row *rows, int c
         }
         footer->row_count = count;
     }
-    show_locked(footer, FOOTER_ROWS, 0, 0);
+    show_locked(footer, FOOTER_ROWS, footer->disp ? rows_gap(footer->disp) : 0);
     pthread_mutex_unlock(&footer->mutex);
+    finish_output(footer);
 }
 
 void footer_set_label(struct footer *footer, const char *key, const char *label)
@@ -387,7 +356,6 @@ static void hide_locked(struct footer *footer)
         erase_locked(footer);
     footer->mode = FOOTER_HIDDEN;
     footer->parked_rows = 0;
-    footer->origin_col = 0;
     free_rows_locked(footer);
 }
 
@@ -398,36 +366,6 @@ void footer_hide(struct footer *footer)
 
     pthread_mutex_lock(&footer->mutex);
     hide_locked(footer);
-    pthread_mutex_unlock(&footer->mutex);
-}
-
-void footer_swap_begin(struct footer *footer)
-{
-    if (!footer)
-        return;
-
-    /* The bracket must open under the lock: a frame drawn between opening and hiding would end
-     * it before the caller's replacement writes. */
-    pthread_mutex_lock(&footer->mutex);
-    if (footer->mode != FOOTER_HIDDEN && !footer->suspended) {
-        fputs(ANSI_SYNC_BEGIN, stdout);
-        footer->swap_open = 1;
-    }
-    hide_locked(footer);
-    pthread_mutex_unlock(&footer->mutex);
-}
-
-void footer_swap_end(struct footer *footer)
-{
-    if (!footer)
-        return;
-
-    pthread_mutex_lock(&footer->mutex);
-    if (footer->swap_open) {
-        fputs(ANSI_SYNC_END, stdout);
-        fflush(stdout);
-        footer->swap_open = 0;
-    }
     pthread_mutex_unlock(&footer->mutex);
 }
 
@@ -467,8 +405,7 @@ static void *footer_thread(void *arg)
             }
             long wait_ms = footer->status_show_at_ms - monotonic_ms();
             if (wait_ms <= 0) {
-                show_locked(footer, FOOTER_STATUS, footer->pending_parked_rows,
-                            footer->pending_origin_col);
+                show_locked(footer, FOOTER_STATUS, footer->pending_parked_rows);
                 continue;
             }
             struct timespec show_deadline = deadline_after_ms(wait_ms);
@@ -489,12 +426,6 @@ int footer_status_gap(const struct disp *disp)
 {
     size_t newlines = disp->column > 0 ? 0 : disp->committed_newlines;
     return newlines >= 2 ? 0 : 2 - (int)newlines;
-}
-
-/* Prepared rows continue the output, starting on the row after it. */
-static int rows_gap(const struct disp *disp)
-{
-    return disp->column > 0 ? 1 : 0;
 }
 
 static void suspend_for_output(void *user)
@@ -536,12 +467,9 @@ static int resume_after_output(void *user)
     footer->suspended = 0;
     int gap =
         footer->mode == FOOTER_ROWS ? rows_gap(footer->disp) : footer_status_gap(footer->disp);
-    if (footer->status_show_pending) {
+    if (footer->status_show_pending)
         footer->pending_parked_rows = gap;
-        footer->pending_origin_col = 0;
-    }
     if (footer->mode != FOOTER_HIDDEN) {
-        footer->origin_col = 0;
         park_locked(footer, gap);
         draw_frame_locked(footer);
     }
@@ -599,10 +527,9 @@ void footer_free(struct footer *footer)
     }
     pthread_mutex_lock(&footer->mutex);
     hide_locked(footer);
-    /* Never leave the terminal in synchronized mode, even on an abandoned swap or suspension. */
-    if (footer->swap_open || footer->suspended_synced) {
+    /* Never leave the terminal in synchronized mode, even on an abandoned suspension. */
+    if (footer->suspended_synced) {
         fputs(ANSI_SYNC_END, stdout);
-        footer->swap_open = 0;
         footer->suspended_synced = 0;
     }
     footer->stop_requested = 1;

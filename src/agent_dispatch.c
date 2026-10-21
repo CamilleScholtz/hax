@@ -213,7 +213,6 @@ static void write_collapsed_header(struct disp *disp, const struct item *call,
     free(layout);
     write_header_extra(disp, text);
     disp_commit_newlines(disp);
-    disp_flush(disp);
 }
 
 /* Cells a call appended to an open row would occupy. */
@@ -231,7 +230,6 @@ static void append_collapsed_argument(struct disp *disp, const struct header_tex
     disp_write_ansi(disp, ANSI_RESET);
     write_header_extra(disp, text);
     disp_commit_newlines(disp);
-    disp_flush(disp);
 }
 
 void render_tool_call_header(struct render_ctx *render, const struct item *call)
@@ -312,6 +310,8 @@ static void write_cluster_line(struct render_ctx *render, const struct item *cal
     header_text_free(&text);
     render->cluster.line_open = is_read;
     render->cluster.last_tool = tool ? tool->def.name : NULL;
+    /* One flush for the whole row change, so the status row returns below it in one frame. */
+    disp_flush(disp);
 }
 
 void render_collapsed_tool_call(struct render_ctx *render, const struct item *call)
@@ -334,17 +334,8 @@ static struct item dispatch_tool_call_collapsed(struct render_ctx *render,
 {
     const struct item *call = &prepared->effective;
     struct footer *footer = render->footer;
-    int is_read = strcmp(call->tool_name, "read") == 0;
-
-    /* The swap keeps the indicator continuous: the erase that restores the cursor to an open
-     * read line, the appended cluster text, and the reparked spinner land as one frame. */
-    footer_swap_begin(footer);
     write_cluster_line(render, call);
-
     request_running_label(footer, call->tool_name);
-    /* Preserve the open line's cursor column for the next read. */
-    footer_park(footer, is_read ? (int)render->disp.column : 0);
-    footer_swap_end(footer);
 
     struct tool_run_ctx run_ctx = {.image_input = image_input};
     char *output = agent_tool_call_run(prepared, &run_ctx);
@@ -358,9 +349,6 @@ static struct item dispatch_tool_call_collapsed(struct render_ctx *render,
 void render_tool_solo_marker(struct render_ctx *render, const char *text)
 {
     struct disp *disp = &render->disp;
-    /* Replacing the spinner with the marker is a swap, so it cannot render as
-     * blank-and-repaint. */
-    footer_swap_begin(render->footer);
     tool_render_write_marker_gutter(disp);
     disp_write_ansi(disp, ANSI_DIM);
     int available_cells = display_width() - TOOL_RENDER_GUTTER_COLS;
@@ -373,7 +361,6 @@ void render_tool_solo_marker(struct render_ctx *render, const char *text)
     free(line);
     disp_write_ansi(disp, ANSI_RESET);
     disp_putc(disp, '\n');
-    footer_swap_end(render->footer);
     disp_flush(disp);
 }
 
@@ -394,8 +381,6 @@ static struct item dispatch_tool_call_verbose(struct render_ctx *render,
         preview_mode == TOOL_PREVIEW_HEAD_TAIL ? TOOL_RENDER_HEAD_TAIL : TOOL_RENDER_HEAD;
     struct tool_render renderer;
     tool_render_init(&renderer, disp, footer, mode);
-    /* The status row waits below the header until output rows take the space above it. */
-    footer_show(footer);
     struct tool_run_ctx run_ctx = {
         .display = tool_render_emit,
         .display_data = &renderer,
@@ -418,7 +403,6 @@ static struct item dispatch_tool_call_verbose(struct render_ctx *render,
         }
     }
     tool_render_finalize(&renderer);
-    footer_hide(footer);
 
     /* Use actual rendered rows: control stripping can erase otherwise non-empty display bytes. */
     if (tool_has_diff_output(tool) && renderer.display_was_called && renderer.rows_emitted == 0 &&
@@ -438,7 +422,7 @@ struct item dispatch_tool_call(struct render_ctx *render, const struct item *cal
 
     enum tool_preview_mode preview_mode = tool_call_preview_mode(&prepared.effective);
     render_set_mode(render,
-                    preview_mode == TOOL_PREVIEW_COLLAPSED ? RENDER_TOOL_CLUSTER : RENDER_IDLE);
+                    preview_mode == TOOL_PREVIEW_COLLAPSED ? RENDER_TOOL_CLUSTER : RENDER_TOOL);
     struct item result =
         preview_mode == TOOL_PREVIEW_COLLAPSED
             ? dispatch_tool_call_collapsed(render, &prepared, image_input)

@@ -27,13 +27,13 @@ static void close_mode(struct render_ctx *render)
             md_flush(render->md);
         break;
     case RENDER_TOOL_CLUSTER:
-        /* Hide first because a parked spinner restores the cluster cursor position. */
-        footer_hide(render->footer);
         if (render->cluster.line_open)
             disp_putc(&render->disp, '\n');
         disp_flush(&render->disp);
         render->cluster.last_tool = NULL;
         render->cluster.line_open = 0;
+        break;
+    case RENDER_TOOL:
         break;
     }
 }
@@ -68,10 +68,14 @@ static void open_mode(struct render_ctx *render, enum render_mode mode)
             md_set_styled(render->md, 1);
         break;
     case RENDER_TOOL_CLUSTER:
-        footer_hide(render->footer);
         disp_block_separator(&render->disp);
-        /* The parked row must not inherit a label from the previous mode. */
+        /* The status row must not keep a label from the previous mode. */
         footer_set_label(render->footer, "working", "working...");
+        footer_show(render->footer);
+        break;
+    case RENDER_TOOL:
+        footer_set_label(render->footer, "working", "working...");
+        footer_show(render->footer);
         break;
     }
 }

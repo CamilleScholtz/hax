@@ -186,6 +186,7 @@ e2e_scenarios = [
     'repl_smoke',
     'repl_status',
     'repl_status_label',
+    'repl_status_tools',
 ]
 
 python = find_program('python3')

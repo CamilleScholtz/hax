@@ -15,8 +15,8 @@ notes (see [docs/releasing.md](docs/releasing.md)).
 - The llama.cpp provider now connects to port 9931 by default, matching `llama-server` since
   llama.cpp v0.7.0. For an older server, set `HAX_LLAMACPP_PORT=8080` or
   `providers.llamacpp.port`.
-- The spinner stays visible for as long as the agent is working, including while an answer
-  streams, so a stalled response no longer looks finished.
+- The status line stays visible for the whole turn, including while an answer streams or a tool
+  runs, so the elapsed time and the current state, such as a requested pause, are always in view.
 
 ## [0.6.1] - 2026-10-15
 

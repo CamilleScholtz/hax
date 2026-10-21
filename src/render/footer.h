@@ -27,14 +27,11 @@ void footer_attach(struct footer *footer, struct disp *disp);
 int footer_status_gap(const struct disp *disp);
 
 /* Show the status row where the next block of the attached output starts, or at column zero of the
- * current empty row when unattached. Hide erases it. A first appearance from hidden is deferred
- * briefly; any show or hide within the grace period cancels it. */
+ * current empty row when unattached, in place of any prepared rows. A first appearance from hidden
+ * is deferred briefly; any show or hide within the grace period cancels it. Made while attached
+ * output is stepping around the footer, as by footer_set_rows() too, the change paints with that
+ * output in one synchronized frame. */
 void footer_show(struct footer *footer);
-
-/* Show the status row one blank row below the current cursor, then restore the cursor on hide.
- * cursor_col is the current zero-based column. The current line must not wrap. First appearances
- * are deferred as for footer_show(). */
-void footer_park(struct footer *footer, int cursor_col);
 
 /* One prepared row: fully styled bytes for a single physical row without a line ending, and its
  * painted cell width. Rows wider than the terminal, as after a resize, are clipped when painted. */
@@ -48,18 +45,8 @@ struct footer_row {
  * hidden; content changes repaint on the next animation frame, not synchronously. */
 void footer_set_rows(struct footer *footer, const struct footer_row *rows, int count);
 
-/* Erase the visible rows and restore the cursor position saved by footer_park(). */
+/* Erase the visible rows, leaving the cursor where the attached output ends. */
 void footer_hide(struct footer *footer);
-
-/* Hide as footer_hide(), but begin DEC 2026 synchronized output atomically with the erase and
- * leave the bracket open for the caller's replacement writes. Pair with footer_swap_end();
- * brackets do not nest. Until then the caller may only write replacement output and optionally
- * re-show the footer as the final act: a show inside the bracket paints immediately, without the
- * first-appearance grace, so the indicator survives the swap without blinking. */
-void footer_swap_begin(struct footer *footer);
-
-/* End the swap's synchronized output. Emits nothing when no swap is open. */
-void footer_swap_end(struct footer *footer);
 
 /* Change the status label as spinner_label_set() and spinner_label_request(), repainting a
  * visible status row when its text changes. */
