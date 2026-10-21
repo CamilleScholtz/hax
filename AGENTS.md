@@ -133,22 +133,30 @@ Extension workflows:
   in `meson.build`; a user-visible endpoint variant should be config, not C.
 - A compiled-in tool needs its source in `meson.build`, an exported `const struct tool` declaration
   in `tool.h`, and an entry in `agent_core.c`'s `TOOLS[]`.
+- A slash command is an entry in `slash.c`'s `COMMANDS[]`. Code that serves only that command lives
+  in `src/commands/<name>.c`, exporting `<name>_command` and, when its arguments complete,
+  `<name>_choices`. A name another module in `src/` already uses takes a `_cmd` suffix
+  (`session_cmd.c`), since a same-named header there would shadow the other one. Logic other
+  callers share stays in its own module, as selection does in `select.c`.
 - Keep protocol translation and terminal-independent state machines pure and separately testable;
   do not require HTTP or a TTY to test parsing and state transitions.
 
 ## Tests
 
 Unit tests are plain C binaries using `tests/harness.h` (`EXPECT`, `EXPECT_STR_EQ`, `T_SKIP`,
-`T_REPORT`). Create scratch directories with the harness's `t_tempdir()`, which removes them
-at process exit; raw `mkdtemp` in tests fails `make lint`. To add a test, append its source to
-`test_sources` in `tests/meson.build`, grouped to mirror the production `sources` list. Test
-names are path-derived: `tools/test_read.c` becomes `tools/read`, and `test_buf.c` becomes
-`buf`.
+`T_REPORT`). Create scratch directories with the harness's `t_tempdir()`, which removes them at
+process exit; raw `mkdtemp` in tests fails `make lint`. The harness also removes inherited `HAX_*`
+variables before `main`, so a test sets the ones it depends on and need not unset the rest. To add a
+test, append its source to `test_sources` in `tests/meson.build`, grouped to mirror the production
+`sources` list. Test names are path-derived: `tools/test_read.c` becomes `tools/read`, and
+`test_buf.c` becomes `buf`.
 
 End-to-end scenarios follow the same conventions in Python: standalone scripts under
 `tests/e2e/`, registered in `e2e_scenarios` in `tests/meson.build`. They run the built binary
-hermetically against mock scripts from `scripts/mock/` via `tests/e2e/harness.py`; its
-docstrings are the how-to.
+hermetically against inline mock-provider scripts via `tests/e2e/harness.py`; its docstrings are
+the how-to, and `scripts/mock/` holds the fixtures for manual checks instead. REPL scenarios drive
+the binary through tmux with its `Terminal`; a change to REPL layout or terminal handling comes
+with one.
 
 Where a test goes:
 
@@ -168,8 +176,10 @@ Where a test goes:
 - Do not assert the same behavior at two levels. Once a unit test pins it, an e2e scenario that
   repeats the check adds run time without adding signal.
 - Before writing a fixture (loopback server, fake command on `PATH`, scripted stream, scratch
-  tree), look for one in sibling test files or `tests/harness.h` and reuse or extract it rather
-  than copying it.
+  tree), look for one in sibling test files or the `test_support` library and reuse or extract it
+  rather than copying it. Shared fixtures are a header plus a `.c` beside it (`tests/harness.h`,
+  `tests/loopback.h`, `tests/tools/bash_fixtures.h`), built into `test_support` in
+  `tests/meson.build`.
 
 ## Code style and conventions
 

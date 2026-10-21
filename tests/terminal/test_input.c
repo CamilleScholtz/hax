@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: MIT */
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -11,6 +12,7 @@
 #include "terminal/ansi.h"
 #include "terminal/input.h"
 #include "terminal/input_core.h"
+#include "terminal/live_region.h"
 #include "terminal/theme.h"
 
 static void test_submitted_message_ascii_gutter(void)
@@ -39,19 +41,23 @@ static void test_edit_rows_repeat_prompt_gutter(void)
         .prompt = ANSI_BOLD "┃" ANSI_BOLD_OFF " ",
         .display_columns = 7,
     };
+    struct live_region region = {0};
     struct buf frame;
     buf_init(&frame);
-    input_render_edit_rows(&frame, &in, 0, 3);
+    input_render_edit_rows(&region, &frame, &in, 0, 4);
     EXPECT_STR_EQ(frame.data, ANSI_BOLD "┃" ANSI_BOLD_OFF " abc " ANSI_ERASE_LINE "\r\n" ANSI_BOLD
                                         "┃" ANSI_BOLD_OFF " def" ANSI_ERASE_LINE "\r\n" ANSI_BOLD
                                         "┃" ANSI_BOLD_OFF " " ANSI_ERASE_LINE "\r\n" ANSI_BOLD
                                         "┃" ANSI_BOLD_OFF " x");
 
+    /* A clipped window repeats the gutter on its rows too. */
+    live_region_forget(&region);
     buf_reset(&frame);
-    input_render_edit_rows(&frame, &in, 1, 2);
+    input_render_edit_rows(&region, &frame, &in, 1, 2);
     EXPECT_STR_EQ(frame.data, ANSI_BOLD "┃" ANSI_BOLD_OFF " def" ANSI_ERASE_LINE "\r\n" ANSI_BOLD
                                         "┃" ANSI_BOLD_OFF " ");
     buf_free(&frame);
+    live_region_free(&region);
 }
 
 static void test_search_continuations_stay_at_column_zero(void)
@@ -63,14 +69,17 @@ static void test_search_continuations_stay_at_column_zero(void)
         .display_columns = 20,
         .continuation_at_column_zero = 1,
     };
+    struct live_region region = {0};
     struct buf frame;
     buf_init(&frame);
-    input_render_edit_rows(&frame, &in, 0, 1);
+    input_render_edit_rows(&region, &frame, &in, 0, 2);
     EXPECT_STR_EQ(frame.data, "search: a" ANSI_ERASE_LINE "\r\nb");
+    live_region_forget(&region);
     buf_reset(&frame);
-    input_render_edit_rows(&frame, &in, 1, 1);
+    input_render_edit_rows(&region, &frame, &in, 1, 1);
     EXPECT_STR_EQ(frame.data, "b");
     buf_free(&frame);
+    live_region_free(&region);
 }
 
 static char *history_fixture(const char *body)
@@ -198,6 +207,33 @@ static void test_history_open_tty_ignores_piped_input(void)
     free(path);
 }
 
+static void test_readline_piped_trims(void)
+{
+    char *path = xasprintf("%s/stdin", t_tempdir());
+    FILE *f = fopen(path, "w");
+    EXPECT(f != NULL);
+    if (!f) {
+        free(path);
+        return;
+    }
+    fputs("  hi \t\n \n", f);
+    fclose(f);
+    int fd = open(path, O_RDONLY);
+    EXPECT(fd >= 0 && dup2(fd, STDIN_FILENO) == STDIN_FILENO);
+    close(fd);
+
+    struct input *in = input_new();
+    char *line = input_readline(in, "> ");
+    EXPECT_STR_EQ(line, "  hi");
+    free(line);
+    line = input_readline(in, "> ");
+    EXPECT_STR_EQ(line, "");
+    free(line);
+    EXPECT(input_readline(in, "> ") == NULL);
+    input_free(in);
+    free(path);
+}
+
 static void noop_view(void *user)
 {
     (void)user;
@@ -279,6 +315,7 @@ int main(void)
     test_history_missing_file();
     test_history_session_entry_persists_on_resubmit();
     test_history_open_tty_ignores_piped_input();
+    test_readline_piped_trims();
     test_modal_key_macro();
     test_modal_key_bind_and_rebind();
     test_modal_key_rejects_printable();

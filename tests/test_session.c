@@ -76,9 +76,10 @@ static int items_equal(const struct item *a, const struct item *b)
            nullable_strings_equal(a->output, b->output) &&
            a->output_hidden_tail == b->output_hidden_tail &&
            nullable_strings_equal(a->reasoning_json, b->reasoning_json) &&
-           nullable_strings_equal(a->reasoning_text, b->reasoning_text) && a->origin == b->origin &&
-           a->inherited == b->inherited && turn_usage_equal(a->usage, b->usage) &&
-           item_images_equal(a, b);
+           nullable_strings_equal(a->reasoning_text, b->reasoning_text) &&
+           nullable_strings_equal(a->reasoning_field, b->reasoning_field) &&
+           a->origin == b->origin && a->inherited == b->inherited &&
+           turn_usage_equal(a->usage, b->usage) && item_images_equal(a, b);
 }
 
 static void expect_item_codec_round_trip(const struct item *source)
@@ -150,6 +151,7 @@ static struct item CONVERSATION[] = {
     {.kind = ITEM_USER_MESSAGE, .text = (char *)"hello world", .inherited = 1},
     {.kind = ITEM_REASONING,
      .reasoning_text = (char *)"thinking...",
+     .reasoning_field = (char *)"reasoning",
      .reasoning_json = (char *)"{\"id\":\"r1\"}"},
     {.kind = ITEM_ASSISTANT_MESSAGE, .text = (char *)"hi there"},
     {.kind = ITEM_TOOL_CALL,
@@ -720,6 +722,92 @@ static void test_undo_record_can_retire_everything(void)
     free(path);
 }
 
+static void test_label_follows_undo_of_everything(void)
+{
+    use_fresh_session_state();
+    struct session_log *log = session_log_open("pa", "ma", NULL, NULL, NULL);
+    EXPECT(log != NULL);
+    char *path = xstrdup(session_log_path(log));
+    session_log_append(log, UNDO_CONVERSATION, 9);
+    EXPECT(session_log_undo(log, 0, 0) == 0);
+
+    struct session_label label;
+    session_label_read(path, 64, &label);
+    EXPECT(label.prompt == NULL);
+    session_label_free(&label);
+
+    struct item replacement[] = {
+        {.kind = ITEM_TURN_BOUNDARY},
+        {.kind = ITEM_USER_MESSAGE, .text = (char *)"replacement"},
+        {.kind = ITEM_ASSISTANT_MESSAGE, .text = (char *)"r0"},
+        {.kind = ITEM_TURN_BOUNDARY},
+        {.kind = ITEM_USER_MESSAGE, .text = (char *)"follow-up"},
+    };
+    session_log_append(log, replacement, 5);
+    EXPECT(session_log_undo(log, 1, 3) == 0);
+    session_log_close(log);
+
+    session_label_read(path, 64, &label);
+    EXPECT(label.prompt != NULL);
+    if (label.prompt)
+        EXPECT_STR_EQ(label.prompt, "replacement");
+    session_label_free(&label);
+    free(path);
+}
+
+static void test_label_takes_selection_of_replacement_prompt(void)
+{
+    use_fresh_session_state();
+    struct session_log *log = session_log_open("pa", "ma", NULL, NULL, NULL);
+    EXPECT(log != NULL);
+    char *path = xstrdup(session_log_path(log));
+    session_log_append(log, UNDO_CONVERSATION, 6);
+    session_log_set_meta(log, "pb", "mb", NULL, NULL, "stance");
+    session_log_append(log, UNDO_CONVERSATION, 9);
+
+    struct session_label label;
+    session_label_read(path, 64, &label);
+    EXPECT_STR_EQ(label.provider, "pa");
+    EXPECT_STR_EQ(label.model, "ma");
+    EXPECT(label.preset == NULL);
+    session_label_free(&label);
+
+    EXPECT(session_log_undo(log, 0, 0) == 0);
+    struct item replacement[] = {
+        {.kind = ITEM_TURN_BOUNDARY},
+        {.kind = ITEM_USER_MESSAGE, .text = (char *)"replacement"},
+    };
+    session_log_append(log, replacement, 2);
+    session_log_close(log);
+
+    session_label_read(path, 64, &label);
+    EXPECT_STR_EQ(label.provider, "pb");
+    EXPECT_STR_EQ(label.model, "mb");
+    EXPECT(label.preset != NULL);
+    if (label.preset)
+        EXPECT_STR_EQ(label.preset, "stance");
+    session_label_free(&label);
+    free(path);
+}
+
+static void test_label_keeps_opening_prompt_without_text(void)
+{
+    use_fresh_session_state();
+    struct item items[] = {
+        {.kind = ITEM_USER_MESSAGE, .images = IMAGES, .n_images = 1},
+        {.kind = ITEM_ASSISTANT_MESSAGE, .text = (char *)"a picture"},
+        {.kind = ITEM_TURN_BOUNDARY},
+        {.kind = ITEM_USER_MESSAGE, .text = (char *)"second"},
+    };
+    char *path = write_session("pa", "ma", NULL, NULL, items, 4);
+
+    struct session_label label;
+    session_label_read(path, 64, &label);
+    EXPECT(label.prompt != NULL && label.prompt[0] == '\0');
+    session_label_free(&label);
+    free(path);
+}
+
 /* A second undo after new user turns is counted over the live conversation of its moment, so the
  * loader must apply records in order rather than against the raw item stream. */
 static void test_nested_undo_records_replay_in_order(void)
@@ -1053,6 +1141,8 @@ static void test_load_budgets_images_from_compaction_seed(void)
 
 int main(void)
 {
+    /* Outside any repository, so recorded sessions neither run git nor depend on the checkout. */
+    EXPECT(chdir(t_tempdir()) == 0);
     test_item_codec_round_trip();
     test_recording_control();
     test_session_round_trip();
@@ -1071,6 +1161,9 @@ int main(void)
     test_log_begin_materializes_before_any_item();
     test_undo_record_retires_and_reappends();
     test_undo_record_can_retire_everything();
+    test_label_follows_undo_of_everything();
+    test_label_takes_selection_of_replacement_prompt();
+    test_label_keeps_opening_prompt_without_text();
     test_nested_undo_records_replay_in_order();
     test_user_turn_records_sum_worked_time();
     test_fork_writes_prefix_as_inherited_without_touching_source();

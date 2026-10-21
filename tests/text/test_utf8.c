@@ -62,6 +62,16 @@ static void test_sequence_valid_four_byte(void)
     EXPECT(utf8_sequence_is_valid("\xF4\x8F\xBF\xBF", 4) == 1); /* U+10FFFF */
 }
 
+static void test_decode_codepoint(void)
+{
+    uint32_t codepoint = 0;
+    EXPECT(utf8_decode_codepoint("a", 1, &codepoint) && codepoint == 'a');
+    EXPECT(utf8_decode_codepoint("\xC3\xA9", 2, &codepoint) && codepoint == 0xE9);
+    EXPECT(utf8_decode_codepoint("\xEF\xB8\x8F", 3, &codepoint) && codepoint == 0xFE0F);
+    EXPECT(utf8_decode_codepoint("\xF0\x9F\x8F\xBD", 4, &codepoint) && codepoint == 0x1F3FD);
+    EXPECT(!utf8_decode_codepoint("\xED\xA0\x80", 3, &codepoint)); /* surrogate */
+}
+
 static void test_sequence_valid_rejects_overlong(void)
 {
     /* C0 80 would encode U+0000 as 2 bytes — overlong, must reject. */
@@ -121,7 +131,7 @@ static void test_buffer_validity(void)
 static void expect_encoded(uint32_t codepoint, const char *want, size_t want_len)
 {
     char out[4];
-    size_t len = utf8_encode(codepoint, out);
+    size_t len = utf8_encode_codepoint(codepoint, out);
     EXPECT_MEM_EQ(out, len, want, want_len);
 }
 
@@ -140,9 +150,9 @@ static void test_encode(void)
 static void test_encode_rejects_non_scalar(void)
 {
     char out[4];
-    EXPECT(utf8_encode(0xD800, out) == 0);
-    EXPECT(utf8_encode(0xDFFF, out) == 0);
-    EXPECT(utf8_encode(0x110000, out) == 0);
+    EXPECT(utf8_encode_codepoint(0xD800, out) == 0);
+    EXPECT(utf8_encode_codepoint(0xDFFF, out) == 0);
+    EXPECT(utf8_encode_codepoint(0x110000, out) == 0);
 }
 
 static void test_next_ascii(void)
@@ -482,6 +492,7 @@ int main(void)
     test_sequence_valid_two_byte();
     test_sequence_valid_three_byte();
     test_sequence_valid_four_byte();
+    test_decode_codepoint();
     test_sequence_valid_rejects_overlong();
     test_sequence_valid_rejects_surrogate();
     test_sequence_valid_rejects_above_max();

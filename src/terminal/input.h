@@ -73,8 +73,10 @@ void input_set_paste_filter(struct input *in, char *(*fn)(const char *text, void
  * One-shot; NULL or "" clears it, and non-tty reads discard it. */
 void input_set_preseed(struct input *in, const char *text);
 
-/* When enabled, Enter on an empty buffer returns "" instead of doing nothing. */
-void input_set_empty_submit(struct input *in, int enabled);
+/* A non-NULL `placeholder` makes Enter on an empty buffer return "" instead of doing nothing,
+ * and the empty buffer shows it as ghost text. An empty submit erases the prompt row and leaves
+ * the cursor at its start, as before the call. NULL restores the default; the text is copied. */
+void input_set_empty_submit(struct input *in, const char *placeholder);
 
 /* Load `path` only for tty sessions; `persist` controls whether later entries are appended
  * there. Scripted input is never retained, so non-tty sessions leave `path` untouched. */
@@ -85,10 +87,12 @@ void input_history_open_tty(struct input *in, const char *path, int persist);
 void input_render_user_message_to(FILE *out, const char *text, size_t len, int display_columns);
 
 struct buf;
+struct live_region;
 
-/* Append the inclusive visible row range of the editable buffer, including prompt gutters and
- * CRLF row breaks. Does not move the cursor or access the terminal. */
-void input_render_edit_rows(struct buf *frame, const struct input *in, int first_row, int last_row);
+/* Append the inclusive visible row range of the editable buffer in live_region form, with prompt
+ * gutters, the ghost hint, and CRLF row breaks. Does not move the cursor or access the terminal. */
+void input_render_edit_rows(struct live_region *region, struct buf *frame, struct input *in,
+                            int first_row, int visible_rows);
 
 /* Return display_width() clamped to the current terminal width. */
 int input_display_cols(void);

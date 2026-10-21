@@ -28,15 +28,16 @@
 #include "transcript.h"
 #include "xalloc.h"
 #include "render/disp.h"
+#include "render/footer.h"
 #include "render/markdown.h"
 #include "render/render_ctx.h"
-#include "render/spinner.h"
 #include "system/clock.h"
 #include "system/fs.h"
 #include "system/spawn.h"
 #include "system/tempfiles.h"
 #include "terminal/ansi.h"
 #include "terminal/input.h"
+#include "terminal/input_core.h"
 #include "terminal/interrupt.h"
 #include "terminal/notify.h"
 #include "terminal/theme.h"
@@ -53,16 +54,13 @@ static const char *build_prompt(char *buffer, size_t size)
     return buffer;
 }
 
-/* Tables buffer invisibly until layout completes; delay the spinner to avoid flicker on fast
- * tables. */
-#define TABLE_SPINNER_DELAY_MS 1500
-
-/* ANSI must bypass disp bookkeeping or it commits a pending newline before the next separator. */
+/* Raw ANSI goes in as zero-width controls, or it would commit a pending newline before the next
+ * separator. */
 static void md_emit_to_disp(const char *bytes, size_t byte_count, int is_raw, void *user)
 {
     struct disp *disp = user;
     if (is_raw)
-        fwrite(bytes, 1, byte_count, disp_sink(disp));
+        disp_write_raw(disp, bytes, byte_count);
     else
         disp_write(disp, bytes, byte_count);
 }
@@ -133,27 +131,21 @@ static void display_stats_line(struct render_ctx *render, const struct provider 
     disp_flush(disp);
 }
 
-/* Curl wait/chunk hook for cancellation and timer-driven retry/table labels. Ordinary text
- * stalls intentionally show no spinner. */
+/* Curl wait/chunk hook for cancellation and the timer-driven retry label. */
 static int agent_stream_tick(void *user)
 {
     struct render_ctx *render = user;
     /* Confirm a pause immediately; the idempotent update also overrides pending labels. */
     if (interrupt_pause_requested() && !interrupt_abort_requested()) {
-        spinner_set_label(render->spinner, "pausing", "pausing... (esc again to interrupt)");
+        footer_set_label(render->footer, "pausing", "pausing... (esc again to interrupt)");
         /* Before first content, cancel immediately; the loop maps the empty turn to a resumable
          * pause. */
         if (!render->stream.content_seen)
             return 1;
     }
     /* Retry countdown owns the label while the model is not streaming. */
-    if (render->retry.deadline_ms) {
+    if (render->retry.deadline_ms)
         render_update_retry_label(render);
-    } else if (render->md && md_in_table(render->md)) {
-        if (!render->table.spinner_visible && render->table.started_at_ms &&
-            monotonic_ms() - render->table.started_at_ms >= TABLE_SPINNER_DELAY_MS)
-            render_show_table_spinner(render);
-    }
     return interrupt_abort_requested();
 }
 
@@ -162,13 +154,10 @@ static int render_on_event(const struct stream_event *event, void *user)
     struct render_ctx *render = user;
     struct disp *disp = &render->disp;
 
-    /* Stream completion closes the buffered-table timing window. */
-    if (event->kind == EV_DONE || event->kind == EV_ERROR)
-        render->table.started_at_ms = 0;
     /* The first post-retry event returns label control to normal rendering. */
     if (event->kind != EV_RETRY && render->retry.deadline_ms) {
         render->retry.deadline_ms = 0;
-        spinner_set_label(render->spinner, "working", "working...");
+        footer_set_label(render->footer, "working", "working...");
     }
 
     /* Once output exists, a pause must preserve it by waiting for a turn seam. */
@@ -188,7 +177,7 @@ static int render_on_event(const struct stream_event *event, void *user)
         if (tool_name && *tool_name) {
             char label[64];
             snprintf(label, sizeof(label), "[%s] composing...", tool_name);
-            spinner_request_label(render->spinner, "compose", label);
+            footer_request_label(render->footer, "compose", label);
         }
         break;
     }
@@ -197,7 +186,7 @@ static int render_on_event(const struct stream_event *event, void *user)
         break;
     case EV_TOOL_CALL_END:
         /* Clear the composing label after args; settling hides normal dispatch latency. */
-        spinner_request_label(render->spinner, "working", "working...");
+        footer_request_label(render->footer, "working", "working...");
         break;
     case EV_TOOL_CALL_DELTA:
         /* No live display: tool calls render as a single block during
@@ -205,7 +194,7 @@ static int render_on_event(const struct stream_event *event, void *user)
         break;
     case EV_REASONING_DELTA: {
         /* Keep the thinking label even when reasoning text is hidden. */
-        spinner_request_label(render->spinner, "thinking", "thinking...");
+        footer_request_label(render->footer, "thinking", "thinking...");
         const char *reasoning_text = event->u.reasoning_delta.text;
         if (!render->show_reasoning || !reasoning_text || !*reasoning_text)
             break;
@@ -243,7 +232,7 @@ static int render_on_event(const struct stream_event *event, void *user)
         char label[32];
         snprintf(label, sizeof(label), "processing... %d%%", percentage);
         /* One key preserves the settle clock while percentages refresh. */
-        spinner_request_label(render->spinner, "processing", label);
+        footer_request_label(render->footer, "processing", label);
         break;
     }
     case EV_DONE:
@@ -421,6 +410,7 @@ static void show_history_cb(void *user)
     render_set_mode(&render, RENDER_IDLE);
     disp_commit_newlines(&render.disp);
     md_free(render.md);
+    disp_free(&render.disp);
     fclose(memory_stream);
 
     struct spawn_pipe pager;
@@ -431,7 +421,8 @@ static void show_history_cb(void *user)
     free(output);
 }
 
-int agent_apply_settings(struct agent_state *state, struct provider *provider, int announce)
+void agent_apply_settings(struct agent_state *state, struct provider *provider,
+                          enum apply_announce announce)
 {
     struct agent_session *session = state->session;
     struct provider *previous_provider = state->provider;
@@ -439,15 +430,9 @@ int agent_apply_settings(struct agent_state *state, struct provider *provider, i
     /* Snapshot the model before reconfigure overwrites it, to tell a real
      * /model change from a /provider or /effort apply that left it the same. */
     char *previous_model = session->model ? xstrdup(session->model) : NULL;
-    if (agent_session_reconfigure(session, provider) != 0) {
-        free(previous_model);
-        return -1;
-    }
-
-    /* Refresh only after validation so a rolled-back selection never changes the display. */
+    agent_session_reconfigure(session, provider);
     agent_display_refresh(state);
 
-    /* Provider ownership transfers only after session reconfiguration succeeds. */
     if (provider_changed) {
         state->provider = provider;
         if (previous_provider)
@@ -471,16 +456,15 @@ int agent_apply_settings(struct agent_state *state, struct provider *provider, i
     session_log_set_meta(state->session_log, agent_provider_log_name(provider), session->model,
                          session->model_label, session->effort, config_str("preset"));
 
-    if (!announce)
-        return 0;
+    if (announce == APPLY_SILENT)
+        return;
 
-    /* Replace a stale startup banner; mid-conversation a banner would imply a reset. */
-    if (session->n_items == 0) {
+    if (announce == APPLY_BANNER_WHEN_EMPTY && session->n_items == 0) {
         render_open_block(state->render);
         banner_print(provider, session);
         disp_sync_external_line(&state->render->disp); /* banner bypasses disp */
         fflush(stdout);
-        return 0;
+        return;
     }
 
     /* Selection notices are display-only; the model cannot act on them. */
@@ -488,11 +472,15 @@ int agent_apply_settings(struct agent_state *state, struct provider *provider, i
     /* Include the stance because a preset can change more than provider and model. */
     const char *preset = config_str("preset");
     char *stance = (preset && *preset) ? xasprintf("[%s] ", preset) : xstrdup("");
-    char *label = session->effort ? xasprintf("switched to %s%s · %s · %s", stance,
-                                              provider->name ? provider->name : "?", model_label,
-                                              session->effort)
-                                  : xasprintf("switched to %s%s · %s", stance,
-                                              provider->name ? provider->name : "?", model_label);
+    const char *provider_name = provider->name ? provider->name : "?";
+    char *label;
+    if (!model_label)
+        label = xasprintf("switched to %s%s · no model — use /model", stance, provider_name);
+    else if (session->effort)
+        label = xasprintf("switched to %s%s · %s · %s", stance, provider_name, model_label,
+                          session->effort);
+    else
+        label = xasprintf("switched to %s%s · %s", stance, provider_name, model_label);
     free(stance);
 
     render_open_block(state->render);
@@ -502,7 +490,6 @@ int agent_apply_settings(struct agent_state *state, struct provider *provider, i
     disp_putc(&state->render->disp, '\n');
     disp_flush(&state->render->disp);
     free(label);
-    return 0;
 }
 
 /* Swapping or cutting history invalidates both resumable state and compaction debt tied to the
@@ -561,35 +548,35 @@ void agent_new_conversation(struct agent_state *state)
     banner_print(state->provider, state->session);
 }
 
-/* Redraw with every prompt so slash-command output cannot hide the empty-send meaning. */
-static void render_resume_hint(struct render_ctx *render, enum agent_resume_reason reason)
+/* A pause or turn limit leaves no trace in the conversation, so only the prompt names it; an
+ * interruption or provider error is already explained above. The prompt carries the empty-send
+ * meaning, so slash-command output cannot scroll it away. */
+static const char *resume_placeholder(enum agent_resume_reason reason)
 {
-    const char *status;
-    const char *action = "enter to continue";
     switch (reason) {
+    case AGENT_RESUME_NONE:
+        return NULL;
     case AGENT_RESUME_PAUSED:
-        status = "paused";
-        break;
+        return "paused — enter to continue";
     case AGENT_RESUME_MAX_TURNS:
-        status = "max turns reached";
-        break;
+        return "max turns reached — enter to continue";
     case AGENT_RESUME_INTERRUPTED:
-        status = "interrupted";
-        break;
+        return "enter to continue";
     case AGENT_RESUME_ERROR:
-        status = "provider error";
-        action = "enter to retry";
-        break;
-    default:
-        return;
+        return "enter to retry";
     }
+    return NULL;
+}
+
+/* Ends every hard-interrupted user turn: a tool's own marker covers only its call, and collapsed or
+ * undispatched calls draw none. */
+static void render_interrupt_marker(struct render_ctx *render)
+{
+    render_open_block(render);
     disp_write_ansi(&render->disp, ANSI_DIM);
-    disp_printf(&render->disp, "[%s — %s]", status, action);
+    disp_printf(&render->disp, "%s", INTERRUPT_MARKER);
     disp_write_ansi(&render->disp, ANSI_RESET);
     disp_putc(&render->disp, '\n');
-    disp_putc(&render->disp, '\n'); /* one blank line between hint and prompt */
-    /* Commit newlines before the editor erases and repaints the prompt row. */
-    disp_commit_newlines(&render->disp);
     disp_flush(&render->disp);
 }
 
@@ -890,7 +877,7 @@ int agent_compact(struct agent_state *state, const char *instructions, int autom
     render_set_mode(render, RENDER_IDLE);
 
     render_stream_begin(render);
-    spinner_set_label(render->spinner, "compacting", "compacting...");
+    footer_set_label(render->footer, "compacting", "compacting...");
     struct compact_params params = {
         .session = session,
         .provider = provider,
@@ -1015,7 +1002,7 @@ static void repl_loop_task_note(const char *text, void *user)
 {
     struct repl_loop_ctx *ctx = user;
     struct render_ctx *render = ctx->state->render;
-    spinner_hide(render->spinner);
+    footer_hide(render->footer);
     render_set_mode(render, RENDER_IDLE);
     render_open_block(render);
     disp_write_ansi(&render->disp, ANSI_DIM);
@@ -1105,7 +1092,8 @@ int agent_run(struct provider **provider_io, const struct hax_opts *options)
      * by this frame. */
     struct render_ctx render = {.disp = {.sink = stdout, .committed_newlines = 1},
                                 .show_reasoning = reasoning_visible()};
-    render.spinner = spinner_new("working...");
+    render.footer = footer_new("working...");
+    footer_attach(render.footer, &render.disp);
     render.md = markdown_enabled() ? md_new(md_emit_to_disp, &render.disp, md_cols()) : NULL;
     /* Transcript logging is optional; its API is NULL-safe. */
     struct transcript_log *transcript =
@@ -1135,6 +1123,8 @@ int agent_run(struct provider **provider_io, const struct hax_opts *options)
     input_history_open_tty(input, history_path, recording_enabled);
     free(history_path);
     free(cwd);
+    struct input_completer slash_completer;
+    slash_completer_init(&slash_completer, &state);
     input_add_completer(input, &slash_completer);
     input_add_completer(input, &file_mention_completer);
     input_set_hint(input, slash_hint_cb, NULL);
@@ -1151,12 +1141,9 @@ int agent_run(struct provider **provider_io, const struct hax_opts *options)
 
     for (;;) {
         disp_block_separator(&render.disp);
-        /* Redraw the resumable hint so slash output cannot hide the empty-send meaning. */
-        if (state.resume_reason != AGENT_RESUME_NONE)
-            render_resume_hint(&render, state.resume_reason);
         /* Only a resumable turn gives an empty send a meaning; otherwise
          * the editor keeps swallowing bare Enter. */
-        input_set_empty_submit(input, state.resume_reason != AGENT_RESUME_NONE);
+        input_set_empty_submit(input, resume_placeholder(state.resume_reason));
         cursor_show();
         /* Rebuilt each iteration so a runtime theme change (/config theme …)
          * recolors the prompt instead of keeping the startup theme's bytes. */
@@ -1172,8 +1159,10 @@ int agent_run(struct provider **provider_io, const struct hax_opts *options)
             continue;
         }
 
-        /* Slash handlers may override this when they drive the display themselves. */
-        disp_sync_external_line(&render.disp);
+        /* An empty send erased its prompt row, so the separator above it still stands. Slash
+         * handlers may override this when they drive the display themselves. */
+        if (*line)
+            disp_sync_external_line(&render.disp);
         if (handle_slash_input(input, &state, line)) {
             current_provider = state.provider;
             free(line);
@@ -1235,8 +1224,6 @@ int agent_run(struct provider **provider_io, const struct hax_opts *options)
             }
         }
         free(line);
-        /* input_readline left the cursor at column 0 of a fresh row. */
-        disp_sync_external_line(&render.disp);
 
         /* A background metadata probe may refine effort before the first request; announce the
          * value that will actually be sent. */
@@ -1275,8 +1262,8 @@ int agent_run(struct provider **provider_io, const struct hax_opts *options)
         int user_turn_errored = 0;
 
         /* Reset promoted spinner state before timing the new user turn. */
-        spinner_set_label(render.spinner, "working", "working...");
-        spinner_set_timer(render.spinner, user_turn_start_ms);
+        footer_set_label(render.footer, "working", "working...");
+        footer_set_timer(render.footer, user_turn_start_ms);
 
         /* Clear stale editor interrupts before arming first-Esc pause and second-Esc abort. */
         interrupt_clear_requests();
@@ -1311,22 +1298,13 @@ int agent_run(struct provider **provider_io, const struct hax_opts *options)
         interrupt_disarm();
         /* Snapshot Esc before auto-compaction clears the interrupt latch. */
         int user_pressed_escape = interrupt_pause_requested();
-        spinner_set_timer(render.spinner, 0);
+        footer_set_timer(render.footer, 0);
 
         /* Close active rendering before post-turn output can emit terminal control sequences. */
         render_set_mode(&render, RENDER_IDLE);
 
-        /* History and the resume hint already expose interruptions; another live marker duplicates
-         * them. */
-        if (user_turn_complete && user_pressed_escape) {
-            /* Confirm an Esc that arrived after the last pause point. */
-            render_open_block(&render);
-            disp_write_ansi(&render.disp, ANSI_DIM);
-            disp_printf(&render.disp, "[finished before pause]");
-            disp_write_ansi(&render.disp, ANSI_RESET);
-            disp_putc(&render.disp, '\n');
-            disp_flush(&render.disp);
-        }
+        if (state.resume_reason == AGENT_RESUME_INTERRUPTED)
+            render_interrupt_marker(&render);
 
         /* Time worked counts errored/interrupted turns too — the wall time
          * was spent either way, and /session's total should reflect it. */
@@ -1363,10 +1341,11 @@ int agent_run(struct provider **provider_io, const struct hax_opts *options)
 
     *provider_io = current_provider;
 
-    spinner_free(render.spinner);
+    footer_free(render.footer);
     input_free(input);
     if (render.md)
         md_free(render.md);
+    disp_free(&render.disp);
     transcript_log_close(transcript);
     session_log_close(state.session_log);
     free(state.pending_preseed);

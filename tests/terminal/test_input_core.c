@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "harness.h"
+#include "xalloc.h"
 #include "system/locale.h"
 #include "terminal/input.h"
 #include "terminal/input_core.h"
@@ -425,6 +426,45 @@ static void test_commit_paste(void)
     input_core_commit_paste(in, "uri", 3);
     EXPECT_STR_EQ(in->buf, "see URI here");
     EXPECT(in->cursor == 7);
+
+    input_free(in);
+}
+
+static void test_submit_ready_trims(void)
+{
+    struct input *in = new_with("hi\n\n");
+    in->cursor = 0;
+    EXPECT(input_core_submit_ready(in));
+    EXPECT_STR_EQ(in->buf, "hi");
+    EXPECT(in->len == 2);
+    EXPECT(in->cursor == 2);
+
+    input_core_set_buffer(in, " \n\n");
+    EXPECT(!input_core_submit_ready(in));
+    EXPECT_STR_EQ(in->buf, "");
+    EXPECT(in->cursor == 0);
+
+    input_core_set_buffer(in, " \n");
+    in->empty_placeholder = xstrdup("continue");
+    EXPECT(input_core_submit_ready(in));
+    EXPECT_STR_EQ(in->buf, "");
+
+    input_free(in);
+}
+
+static void test_load_edited(void)
+{
+    struct input *in = new_with("draft");
+    in->cursor = 0;
+
+    input_core_load_edited(in, "\n  a\0b\n\n", 8);
+    EXPECT_STR_EQ(in->buf, "  a b");
+    EXPECT(in->len == 5);
+    EXPECT(in->cursor == 5);
+
+    input_core_load_edited(in, "", 0);
+    EXPECT_STR_EQ(in->buf, "");
+    EXPECT(in->cursor == 0);
 
     input_free(in);
 }
@@ -1218,6 +1258,52 @@ static void test_decode_overflow_and_runaway(void)
     EXPECT(decode_bytes(runaway_sequence, sizeof(runaway_sequence)) == INPUT_ACTION_NONE);
 }
 
+static char *echo_hint(const char *buf, void *user)
+{
+    (void)user;
+    return xasprintf(" hint for %s", buf);
+}
+
+static void expect_ghost(const struct input *in, const char *expected)
+{
+    char *ghost = input_core_ghost_text(in);
+    if (!expected)
+        EXPECT(ghost == NULL);
+    else if (!ghost)
+        FAIL("no ghost text, expected '%s'", expected);
+    else
+        EXPECT_STR_EQ(ghost, expected);
+    free(ghost);
+}
+
+static void test_ghost_text_precedence(void)
+{
+    struct input *in = new_with(NULL);
+    in->hint_fn = echo_hint;
+    in->empty_placeholder = xstrdup("enter to continue");
+    expect_ghost(in, "enter to continue");
+
+    input_core_set_buffer(in, "/x");
+    expect_ghost(in, " hint for /x");
+    in->candidates = xstrdup("  /a /b");
+    expect_ghost(in, "  /a /b");
+    in->cursor = 1;
+    expect_ghost(in, NULL);
+
+    input_core_set_buffer(in, "");
+    in->exit_armed = 1;
+    expect_ghost(in, "ctrl+c again to exit");
+    input_free(in);
+}
+
+static void test_ghost_text_is_sanitized(void)
+{
+    struct input *in = new_with("/preset ");
+    in->candidates = xstrdup("  evil\x1b[2Jx fast");
+    expect_ghost(in, "  evil?[2Jx fast");
+    input_free(in);
+}
+
 int main(void)
 {
     /* mbrtowc needs a UTF-8 locale to exercise multi-byte layout. */
@@ -1255,6 +1341,8 @@ int main(void)
     test_set_buffer_and_insert();
     test_replace_span();
     test_commit_paste();
+    test_submit_ready_trims();
+    test_load_edited();
     test_motions_ascii();
     test_motions_utf8();
     test_motions_malformed_utf8();
@@ -1304,5 +1392,7 @@ int main(void)
     test_decode_partial_and_unknown();
     test_decode_overflow_and_runaway();
 
+    test_ghost_text_precedence();
+    test_ghost_text_is_sanitized();
     T_REPORT();
 }
