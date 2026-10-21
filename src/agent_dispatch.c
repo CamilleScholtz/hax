@@ -319,6 +319,16 @@ void render_collapsed_tool_call(struct render_ctx *render, const struct item *ca
     write_cluster_line(render, call);
 }
 
+/* Requested rather than set, so a quick tool never flashes its label. */
+static void request_running_label(struct footer *footer, const char *tool_name)
+{
+    char label[64];
+    char request_key[32];
+    snprintf(label, sizeof(label), "[%s] running...", tool_name);
+    snprintf(request_key, sizeof(request_key), "run:%s", tool_name);
+    footer_request_label(footer, request_key, label);
+}
+
 static struct item dispatch_tool_call_collapsed(struct render_ctx *render,
                                                 struct agent_tool_call *prepared, int image_input)
 {
@@ -331,12 +341,8 @@ static struct item dispatch_tool_call_collapsed(struct render_ctx *render,
     footer_swap_begin(footer);
     write_cluster_line(render, call);
 
+    request_running_label(footer, call->tool_name);
     /* Preserve the open line's cursor column for the next read. */
-    char label[64];
-    char request_key[32];
-    snprintf(label, sizeof(label), "[%s] running...", call->tool_name);
-    snprintf(request_key, sizeof(request_key), "run:%s", call->tool_name);
-    footer_request_label(footer, request_key, label);
     footer_park(footer, is_read ? (int)render->disp.column : 0);
     footer_swap_end(footer);
 
@@ -352,8 +358,8 @@ static struct item dispatch_tool_call_collapsed(struct render_ctx *render,
 void render_tool_solo_marker(struct render_ctx *render, const char *text)
 {
     struct disp *disp = &render->disp;
-    /* Replacing the spinner (or a live placeholder row) with the marker is a swap, so it
-     * cannot render as blank-and-repaint. */
+    /* Replacing the spinner with the marker is a swap, so it cannot render as
+     * blank-and-repaint. */
     footer_swap_begin(render->footer);
     tool_render_write_marker_gutter(disp);
     disp_write_ansi(disp, ANSI_DIM);
@@ -381,23 +387,22 @@ static struct item dispatch_tool_call_verbose(struct render_ctx *render,
     struct disp *disp = &render->disp;
     struct footer *footer = render->footer;
     write_tool_header(disp, call);
-    /* A deferred "running" label could surface after the tool-status rows release the footer. */
-    footer_set_label(footer, "working", "working...");
+    request_running_label(footer, call->tool_name);
 
     /* Diff mode is selected from the completed output so errors remain plain previews. */
     enum tool_render_mode mode =
         preview_mode == TOOL_PREVIEW_HEAD_TAIL ? TOOL_RENDER_HEAD_TAIL : TOOL_RENDER_HEAD;
     struct tool_render renderer;
     tool_render_init(&renderer, disp, footer, mode);
-    /* An empty live row instead of a parked "working..." label: the indicator sits in the block
-     * and the first output line replaces it in place, so a fast tool never blinks a label. */
-    tool_render_begin_live(&renderer);
+    /* The status row waits below the header until output rows take the space above it. */
+    footer_show(footer);
     struct tool_run_ctx run_ctx = {
         .display = tool_render_emit,
         .display_data = &renderer,
         .image_input = image_input,
     };
     char *output = agent_tool_call_run(prepared, &run_ctx);
+    footer_request_label(footer, "working", "working...");
 
     if (output && !renderer.display_was_called) {
         if (tool_has_diff_output(tool) && !*output) {

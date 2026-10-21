@@ -118,5 +118,33 @@ def test_stays_up_while_a_collapsed_tool_runs():
     )
 
 
+def test_stays_below_a_running_tools_output():
+    """A verbose tool's output stays open, with no closing corner, above the status row."""
+    term = harness.Terminal(
+        """
+        tool bash {"command":"printf 'one\\\\ntwo\\\\n'; read -r line < fifo"}
+        end-turn
+        """
+    )
+    os.mkfifo(term.workdir / "fifo")
+    term.wait_for("❯")
+    term.type("go")
+    term.send("Enter")
+    term.expect_screen(
+        """
+        ▌ hax › mock · mock-model
+        ▌ ctrl-d quit · try /help
+
+        ▌ go
+
+        [bash] printf 'one\\ntwo\\n'; read -r line < fifo
+        ┌ one
+        ╵ two
+
+        {*}...
+        """
+    )
+
+
 if __name__ == "__main__":
     harness.main(globals())

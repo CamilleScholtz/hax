@@ -39,8 +39,6 @@ struct tool_render {
 
     struct buf status_line;
     int status_visible;
-    /* The live row is the empty placeholder, not committed content. */
-    int status_placeholder;
     int block_open;
 
     int rows_emitted;
@@ -66,11 +64,6 @@ void tool_render_free(struct tool_render *render);
 
 /* Change policy before feeding any bytes. */
 void tool_render_set_mode(struct tool_render *render, enum tool_render_mode mode);
-
-/* Show an empty live preview row — an animated gutter awaiting content — so a running tool is
- * visible before its first output line, which replaces the row in place. A block that never
- * produces output erases the row again. No-op without a footer. */
-void tool_render_begin_live(struct tool_render *render);
 
 void tool_render_feed(struct tool_render *render, const char *bytes, size_t len);
 

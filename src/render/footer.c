@@ -17,7 +17,6 @@
 #include "terminal/ansi.h"
 #include "terminal/live_region.h"
 #include "terminal/sgr.h"
-#include "terminal/theme.h"
 #include "terminal/width.h"
 
 /* An indicator that would be replaced this quickly reads as flicker, not feedback. */
@@ -49,11 +48,10 @@ struct footer {
     long status_show_at_ms;
     int pending_parked_rows;
     int pending_origin_col;
-    /* Prepared rows, newest last; the animated glyph overprints the last row. */
+    /* Prepared rows, newest last, painted above a blank row and the status row. */
     char *row_bytes[FOOTER_ROWS_MAX];
     int row_cells[FOOTER_ROWS_MAX];
     int row_count;
-    int rows_dirty;
     struct live_region region;
 
     struct disp *disp; /* borrowed; NULL when unattached */
@@ -64,25 +62,34 @@ struct footer {
 };
 
 void footer_build_frame(struct buf *frame, struct live_region *region,
-                        const struct footer_row *rows, int row_count, const char *glyph,
-                        int terminal_cols)
+                        const struct footer_row *rows, int row_count, int terminal_cols)
 {
     buf_append_str(frame, ANSI_SYNC_BEGIN);
     /* Rows paint from the default style, whatever the output above left active. */
     buf_append_str(frame, ANSI_RESET);
     live_region_rewind(region, frame, terminal_cols);
-    for (int row = 0; row < row_count; row++)
-        live_region_add_row(region, frame, rows[row].bytes, strlen(rows[row].bytes),
-                            rows[row].cells);
+    /* Rows prepared before a narrowing would wrap, and wide characters make their wrapped height
+     * unpredictable; clipped, every row paints on one physical row. The last column stays free, as
+     * filling it can trigger deferred autowrap. */
+    int max_cells = terminal_cols > 1 ? terminal_cols - 1 : 1;
+    struct buf clipped;
+    buf_init(&clipped);
+    for (int row = 0; row < row_count; row++) {
+        const char *bytes = rows[row].bytes;
+        size_t len = strlen(bytes);
+        int cells = rows[row].cells;
+        if (cells > max_cells) {
+            buf_reset(&clipped);
+            cells = clip_styled_row(&clipped, bytes, len, max_cells, 1);
+            bytes = clipped.data ? clipped.data : "";
+            len = clipped.len;
+        }
+        live_region_add_row(region, frame, bytes, len, cells);
+    }
+    buf_free(&clipped);
     /* The cursor is hidden while the footer shows, so it rests at the row's start, where no
      * terminal's rewrap can carry it off the row. */
     live_region_end_frame(region, frame, row_count - 1, 0);
-    if (glyph) {
-        /* The glyph overprints the last row's first cell, so it must follow the erase. */
-        buf_append_str(frame, theme_open(THEME_CHROME_DIM));
-        buf_append_str(frame, glyph);
-        buf_append_str(frame, ANSI_RESET);
-    }
     buf_append_str(frame, ANSI_SYNC_END);
 }
 
@@ -92,70 +99,52 @@ static void write_frame_locked(struct buf *frame)
     fflush(stdout);
 }
 
-static void draw_status_locked(struct footer *footer, const char *glyph)
+/* Returns the row's cells. */
+static int format_status_locked(const struct footer *footer, struct buf *out)
 {
     long elapsed_ms =
         footer->timer_started_at_ms > 0 ? monotonic_ms() - footer->timer_started_at_ms : 0;
+    /* Reserve the last terminal column because filling it can trigger deferred autowrap. */
+    return spinner_format_status(out, spinner_glyph_now(), footer->label.text, elapsed_ms,
+                                 term_width() - 1);
+}
+
+int footer_rows_that_fit(int row_count, int terminal_rows)
+{
+    int fit = terminal_rows - 3;
+    if (fit < 0)
+        return 0;
+    return row_count < fit ? row_count : fit;
+}
+
+/* The whole frame repaints each tick, as the status row's glyph and timer change with it. */
+static void draw_frame_locked(struct footer *footer)
+{
+    if (footer->mode == FOOTER_HIDDEN)
+        return;
+
+    struct footer_row rows[FOOTER_ROWS_MAX + 2];
+    int count = 0;
+    int prepared = 0;
+    if (footer->mode == FOOTER_ROWS)
+        prepared = footer_rows_that_fit(footer->row_count, term_height());
+    if (prepared > 0) {
+        /* The newest rows are kept. */
+        for (int row = footer->row_count - prepared; row < footer->row_count; row++)
+            rows[count++] = (struct footer_row){footer->row_bytes[row], footer->row_cells[row]};
+        rows[count++] = (struct footer_row){"", 0};
+    }
     struct buf status;
     buf_init(&status);
-    /* Reserve the last terminal column because filling it can trigger deferred autowrap. */
-    int cells =
-        spinner_format_status(&status, glyph, footer->label.text, elapsed_ms, term_width() - 1);
-    struct footer_row row = {.bytes = status.data ? status.data : "", .cells = cells};
+    int status_cells = format_status_locked(footer, &status);
+    rows[count++] = (struct footer_row){status.data ? status.data : "", status_cells};
 
     struct buf frame;
     buf_init(&frame);
-    footer_build_frame(&frame, &footer->region, &row, 1, NULL, term_width());
+    footer_build_frame(&frame, &footer->region, rows, count, term_width());
     write_frame_locked(&frame);
     buf_free(&frame);
     buf_free(&status);
-}
-
-/* The cursor idles just after the glyph between frames. */
-static void draw_glyph_only_locked(const char *glyph)
-{
-    fputs("\r", stdout);
-    fputs(theme_open(THEME_CHROME_DIM), stdout);
-    fputs(glyph, stdout);
-    fputs(ANSI_RESET, stdout);
-    fflush(stdout);
-}
-
-static void draw_rows_locked(struct footer *footer, const char *glyph)
-{
-    if (!footer->rows_dirty && footer->region.row_count > 0) {
-        draw_glyph_only_locked(glyph);
-        return;
-    }
-
-    struct footer_row rows[FOOTER_ROWS_MAX];
-    for (int row = 0; row < footer->row_count; row++) {
-        rows[row].bytes = footer->row_bytes[row];
-        rows[row].cells = footer->row_cells[row];
-    }
-
-    struct buf frame;
-    buf_init(&frame);
-    footer_build_frame(&frame, &footer->region, rows, footer->row_count, glyph, term_width());
-    write_frame_locked(&frame);
-    footer->rows_dirty = 0;
-    buf_free(&frame);
-}
-
-static void draw_frame_locked(struct footer *footer)
-{
-    const char *glyph = spinner_glyph_now();
-
-    switch (footer->mode) {
-    case FOOTER_HIDDEN:
-        break;
-    case FOOTER_STATUS:
-        draw_status_locked(footer, glyph);
-        break;
-    case FOOTER_ROWS:
-        draw_rows_locked(footer, glyph);
-        break;
-    }
 }
 
 /* Erase under the current width so a resize between paint and erase still clears every row, then
@@ -349,7 +338,6 @@ void footer_set_rows(struct footer *footer, const struct footer_row *rows, int c
             footer->row_cells[row] = rows[row].cells;
         }
         footer->row_count = count;
-        footer->rows_dirty = 1;
     }
     show_locked(footer, FOOTER_ROWS, 0, 0);
     pthread_mutex_unlock(&footer->mutex);
@@ -361,7 +349,7 @@ void footer_set_label(struct footer *footer, const char *key, const char *label)
         return;
 
     pthread_mutex_lock(&footer->mutex);
-    if (spinner_label_set(&footer->label, key, label) && footer->mode == FOOTER_STATUS &&
+    if (spinner_label_set(&footer->label, key, label) && footer->mode != FOOTER_HIDDEN &&
         !footer->suspended)
         draw_frame_locked(footer);
     pthread_mutex_unlock(&footer->mutex);
@@ -374,7 +362,7 @@ void footer_request_label(struct footer *footer, const char *key, const char *la
 
     pthread_mutex_lock(&footer->mutex);
     if (spinner_label_request(&footer->label, key, label, monotonic_ms()) &&
-        footer->mode == FOOTER_STATUS && !footer->suspended)
+        footer->mode != FOOTER_HIDDEN && !footer->suspended)
         draw_frame_locked(footer);
     pthread_mutex_unlock(&footer->mutex);
 }

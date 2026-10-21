@@ -14,7 +14,6 @@
 #include "xalloc.h"
 #include "system/locale.h"
 #include "terminal/ansi.h"
-#include "terminal/escape.h"
 #include "terminal/input_core.h"
 #include "terminal/live_region.h"
 #include "terminal/picker_core.h"
@@ -196,42 +195,6 @@ static int footer_text_width(int terminal_cols)
     return w < 8 ? 8 : w;
 }
 
-/* Trusted picker ANSI sequences have zero width. Final clipping keeps each logical row on one
- * physical row; the returned width supports cursor recovery after terminal reflow. */
-static int append_clipped_line(struct buf *output, const char *line, size_t line_len,
-                               int terminal_cols, int use_utf8)
-{
-    int cells = 0;
-    size_t offset = 0;
-    while (offset < line_len) {
-        if ((unsigned char)line[offset] == 0x1b) {
-            size_t escape_len = escape_sequence_len(line + offset, line_len - offset);
-            buf_append(output, line + offset, escape_len);
-            offset += escape_len;
-            continue;
-        }
-
-        size_t bytes;
-        int width = utf8_codepoint_cells(line, line_len, offset, &bytes);
-        int codepoint_cells = width < 0 ? 1 : width;
-        if (cells + codepoint_cells > terminal_cols) {
-            if (cells < terminal_cols) {
-                buf_append_str(output, use_utf8 ? "\xe2\x80\xa6" : ".");
-                cells++;
-            }
-            buf_append_str(output, ANSI_RESET);
-            return cells;
-        }
-        if (width < 0)
-            buf_append(output, "?", 1);
-        else
-            buf_append(output, line + offset, bytes ? bytes : 1);
-        cells += codepoint_cells;
-        offset += bytes ? bytes : 1;
-    }
-    return cells;
-}
-
 static void render_search(struct buf *output, const struct picker *picker, int terminal_cols,
                           int use_utf8)
 {
@@ -360,8 +323,8 @@ static void frame_init(struct frame *frame, struct live_region *region, int term
 static void frame_emit(struct frame *frame)
 {
     buf_reset(&frame->clipped_row);
-    int cells = append_clipped_line(&frame->clipped_row, frame->row.data ? frame->row.data : "",
-                                    frame->row.len, frame->width, frame->use_utf8);
+    int cells = clip_styled_row(&frame->clipped_row, frame->row.data ? frame->row.data : "",
+                                frame->row.len, frame->width, frame->use_utf8);
     live_region_add_row(frame->region, &frame->output,
                         frame->clipped_row.data ? frame->clipped_row.data : "",
                         frame->clipped_row.len, cells);

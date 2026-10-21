@@ -3,8 +3,8 @@
 #define HAX_RENDER_FOOTER_H
 
 /* Thread-safe live area below the conversation, written directly to stdout for interactive
- * terminals only: either the spinner's status row or rows of live tool output, animated until
- * hidden. Operations taking a footer pointer are NULL-safe no-ops.
+ * terminals only: the spinner's status row, below rows of live tool output when there are any,
+ * animated until hidden. Operations taking a footer pointer are NULL-safe no-ops.
  *
  * Between show and hide, callers must not write to stdout except through an attached disp, which
  * makes way for the footer; otherwise the footer owns the cursor. */
@@ -37,17 +37,15 @@ void footer_show(struct footer *footer);
 void footer_park(struct footer *footer, int cursor_col);
 
 /* One prepared row: fully styled bytes for a single physical row without a line ending, and its
- * painted cell width for reflow-aware repaints. Rows must be clipped to the terminal by the
- * caller; a wrapped row breaks the footer's row accounting. */
+ * painted cell width. Rows wider than the terminal, as after a resize, are clipped when painted. */
 struct footer_row {
     const char *bytes;
     int cells;
 };
 
-/* Replace the status row with up to FOOTER_ROWS_MAX copied prepared rows, newest last; excess
- * oldest rows are dropped. Rows are painted verbatim, with the spinner's glyph overprinting the
- * last row's first cell. Shows them if the footer is hidden; content changes repaint on the next
- * animation frame, not synchronously. */
+/* Paint up to FOOTER_ROWS_MAX copied prepared rows, newest last, above a blank row and the status
+ * row; excess oldest rows are dropped. Rows are painted verbatim. Shows them if the footer is
+ * hidden; content changes repaint on the next animation frame, not synchronously. */
 void footer_set_rows(struct footer *footer, const struct footer_row *rows, int count);
 
 /* Erase the visible rows and restore the cursor position saved by footer_park(). */
@@ -69,7 +67,7 @@ void footer_set_label(struct footer *footer, const char *key, const char *label)
 void footer_request_label(struct footer *footer, const char *key, const char *label);
 
 /* Set the status row's elapsed-time origin to a positive monotonic_ms() value, or disable the
- * counter with zero. The counter appears only for long waits and never on prepared rows. */
+ * counter with zero. The counter appears only for long waits. */
 void footer_set_timer(struct footer *footer, long started_at_ms);
 
 struct buf;
@@ -82,12 +80,16 @@ struct live_region;
 int footer_build_return(struct buf *out, const struct disp *disp, int gap_rows, int parked_cols,
                         int terminal_cols);
 
+/* How many of row_count prepared rows fit on a screen terminal_rows high, below the output's last
+ * row and above the blank and status rows. A taller footer could not climb back to its top, and
+ * each repaint would scroll a row into history. */
+int footer_rows_that_fit(int row_count, int terminal_rows);
+
 /* Append one synchronized repaint of region with rows, overprinting each row before erasing its
- * stale tail so terminals without synchronized output never show a blank frame. The cursor rests
- * at the start of the last row, after a glyph overprinting its first cell when one is given. Pure
- * with respect to the terminal. */
+ * stale tail so terminals without synchronized output never show a blank frame. Rows wider than
+ * terminal_cols - 1 are clipped to it. The cursor rests at the start of the last row. Pure with
+ * respect to the terminal. */
 void footer_build_frame(struct buf *frame, struct live_region *region,
-                        const struct footer_row *rows, int row_count, const char *glyph,
-                        int terminal_cols);
+                        const struct footer_row *rows, int row_count, int terminal_cols);
 
 #endif /* HAX_RENDER_FOOTER_H */

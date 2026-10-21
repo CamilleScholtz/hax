@@ -66,9 +66,7 @@ static void test_footer_is_null_and_silent_without_tty(void)
     EXPECT_STR_EQ(capture_read(), "");
 }
 
-#define FRAME_CHROME ANSI_DIM ANSI_CYAN
-
-static void test_frame_paints_rows_verbatim_under_glyph(void)
+static void test_frame_paints_rows_verbatim(void)
 {
     struct buf frame;
     buf_init(&frame);
@@ -76,11 +74,9 @@ static void test_frame_paints_rows_verbatim_under_glyph(void)
     struct footer_row rows[] = {{.bytes = "<older>", .cells = 7},
                                 {.bytes = "<newest>", .cells = 8}};
 
-    footer_build_frame(&frame, &region, rows, 2, "*", 80);
+    footer_build_frame(&frame, &region, rows, 2, 80);
     EXPECT_STR_EQ(frame.data, ANSI_SYNC_BEGIN ANSI_RESET
-                  "\r"
-                  "<older>" ANSI_ERASE_LINE "\r\n"
-                  "<newest>" ANSI_ERASE_BELOW "\r" FRAME_CHROME "*" ANSI_RESET ANSI_SYNC_END);
+                  "\r<older>" ANSI_ERASE_LINE "\r\n<newest>" ANSI_ERASE_BELOW "\r" ANSI_SYNC_END);
     EXPECT(region.row_count == 2);
     EXPECT(region.cursor_row == 1);
     EXPECT(region.cursor_col == 0);
@@ -88,19 +84,28 @@ static void test_frame_paints_rows_verbatim_under_glyph(void)
     buf_free(&frame);
 }
 
-static void test_frame_without_glyph_rests_cursor_at_row_start(void)
+static void test_frame_clips_rows_wider_than_the_screen(void)
 {
     struct buf frame;
     buf_init(&frame);
     struct live_region region = {0};
-    struct footer_row row = {.bytes = "<status>", .cells = 8};
+    /* Prepared at 80 columns, painted at 5: U+6F22 twice would straddle the kept four cells. */
+    struct footer_row row = {.bytes = "ab\xe6\xbc\xa2\xe6\xbc\xa2", .cells = 6};
 
-    footer_build_frame(&frame, &region, &row, 1, NULL, 80);
-    EXPECT_STR_EQ(frame.data,
-                  ANSI_SYNC_BEGIN ANSI_RESET "\r<status>" ANSI_ERASE_BELOW "\r" ANSI_SYNC_END);
-    EXPECT(region.cursor_col == 0);
+    footer_build_frame(&frame, &region, &row, 1, 5);
+    EXPECT_STR_EQ(frame.data, ANSI_SYNC_BEGIN ANSI_RESET "\rab\xe6\xbc\xa2\x1b[0m" ANSI_ERASE_BELOW
+                                                         "\r" ANSI_SYNC_END);
+    EXPECT(region.row_widths[0] == 4);
     live_region_free(&region);
     buf_free(&frame);
+}
+
+static void test_rows_fit_between_the_output_and_the_status_row(void)
+{
+    EXPECT(footer_rows_that_fit(5, 24) == 5);
+    EXPECT(footer_rows_that_fit(5, 6) == 3);
+    EXPECT(footer_rows_that_fit(5, 3) == 0);
+    EXPECT(footer_rows_that_fit(5, 1) == 0);
 }
 
 static void test_status_row_starts_the_next_block(void)
@@ -167,8 +172,9 @@ int main(void)
 {
     capture_init();
     test_footer_is_null_and_silent_without_tty();
-    test_frame_paints_rows_verbatim_under_glyph();
-    test_frame_without_glyph_rests_cursor_at_row_start();
+    test_frame_paints_rows_verbatim();
+    test_frame_clips_rows_wider_than_the_screen();
+    test_rows_fit_between_the_output_and_the_status_row();
     test_status_row_starts_the_next_block();
     test_return_lands_where_output_ends_on_screen();
     T_REPORT();
